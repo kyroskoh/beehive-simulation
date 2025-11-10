@@ -737,6 +737,7 @@
                 targetCell: null,
                 speed: 0.5,
                 angle: 0,
+                wanderAngle: 0, // For smooth circular movement
                 state: 'laying',
                 eggsLaid: 0,
                 lastEggTime: 0,
@@ -780,11 +781,27 @@
             const speedMultiplier = config.simulationSpeed;
             queenBee.lastEggTime += speedMultiplier;
             
-            // Queen moves slowly around center
-            const wanderAngle = Date.now() / 5000;
-            queenBee.angle = wanderAngle;
-            queenBee.x = config.centerX + Math.cos(wanderAngle) * 30;
-            queenBee.y = config.centerY + Math.sin(wanderAngle) * 30;
+            // Queen moves slowly around center in a smooth circle
+            if (!queenBee.wanderAngle) {
+                queenBee.wanderAngle = 0;
+            }
+            queenBee.wanderAngle += 0.01 * speedMultiplier; // Slow, smooth rotation
+            
+            const radius = 30;
+            const targetX = config.centerX + Math.cos(queenBee.wanderAngle) * radius;
+            const targetY = config.centerY + Math.sin(queenBee.wanderAngle) * radius;
+            
+            // Smooth movement towards target position
+            const dx = targetX - queenBee.x;
+            const dy = targetY - queenBee.y;
+            const moveSpeed = 0.3 * speedMultiplier;
+            queenBee.x += dx * moveSpeed;
+            queenBee.y += dy * moveSpeed;
+            
+            // Set angle based on movement direction
+            if (Math.abs(dx) > 0.1 || Math.abs(dy) > 0.1) {
+                queenBee.angle = Math.atan2(dy, dx);
+            }
             
             // Lay eggs in empty brood cells
             if (queenBee.lastEggTime > 60) { // Lay egg every ~60 frames
@@ -1055,11 +1072,12 @@
             
             ctx.save();
             ctx.translate(queenBee.x, queenBee.y);
+            ctx.rotate(queenBee.angle);
             
             // Larger size for queen
             const queenSize = 10;
             
-            // Crown/royal indicator
+            // Crown/royal indicator (always points up relative to bee)
             ctx.fillStyle = '#FFD700';
             ctx.beginPath();
             ctx.moveTo(0, -queenSize - 3);
@@ -1084,6 +1102,16 @@
             ctx.moveTo(3, -queenSize * 0.7);
             ctx.lineTo(3, queenSize * 0.7);
             ctx.stroke();
+            
+            // Wings (smaller than worker bees, more elegant)
+            const wingFlap = Math.sin(Date.now() / 100) * 0.2;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.beginPath();
+            ctx.ellipse(-2, -2, 3, 1.5, -0.3 + wingFlap, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(-2, 2, 3, 1.5, 0.3 - wingFlap, 0, Math.PI * 2);
+            ctx.fill();
             
             ctx.restore();
         }
