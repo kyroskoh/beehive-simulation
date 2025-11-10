@@ -65,8 +65,9 @@ An interactive, real-time simulation of honeybee colony behavior and honeycomb c
 - Modern gradient background with purple gradients
 - Smooth animations and transitions for all cell type changes
 - Responsive design
-- Color-coded legend for cell types
+- Color-coded legend for cell types and bee types
 - Professional stat displays with 4 key metrics
+- **Side stats panel** for tracked bee monitoring with visual progress bars
 - Real-time interactive tooltips with detailed information
 - Visual tracking indicators (golden rings and lines)
 - Dynamic speed control feedback
@@ -136,7 +137,13 @@ The deployment happens automatically on every push to the main branch, or you ca
    - Fast forward (1.25x-4x): Watch colony expansion rapidly
 6. **Track Individual Bees**: Click on any bee to follow its journey
    - Golden ring appears around the tracked bee (works even when paused!)
+   - **Side stats panel** appears showing real-time bee statistics:
+     - Bee type, state, carrying status
+     - Speed and efficiency with visual bars
+     - Current position and target distance
+     - Target cell coordinates
    - Lines show the bee's current target destination
+   - Stats update continuously for easy monitoring
    - Click another bee to switch tracking, or click empty space to clear
    - Click "Clear Tracking" button to stop following
    - Perfect for studying bee behavior when simulation is paused

@@ -318,6 +318,93 @@
             background: #90EE90;
             color: #333;
         }
+        
+        #trackedBeeStats {
+            position: fixed;
+            right: 20px;
+            top: 20px;
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            min-width: 250px;
+            max-width: 300px;
+            display: none;
+            z-index: 100;
+        }
+        
+        #trackedBeeStats.visible {
+            display: block;
+        }
+        
+        .tracked-bee-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #eee;
+        }
+        
+        .tracked-bee-title {
+            font-weight: bold;
+            font-size: 16px;
+            color: #333;
+        }
+        
+        .tracked-bee-stats-grid {
+            display: grid;
+            gap: 12px;
+        }
+        
+        .tracked-stat-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+        }
+        
+        .tracked-stat-label {
+            font-size: 13px;
+            color: #666;
+            font-weight: 500;
+        }
+        
+        .tracked-stat-value {
+            font-size: 14px;
+            color: #333;
+            font-weight: bold;
+        }
+        
+        .tracked-stat-bar {
+            width: 100%;
+            height: 8px;
+            background: #f0f0f0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 5px;
+        }
+        
+        .tracked-stat-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            transition: width 0.3s ease;
+        }
+        
+        .tracked-stat-bar-fill.honey {
+            background: linear-gradient(90deg, #FFD700, #FFA500);
+        }
+        
+        .tracked-stat-bar-fill.efficiency {
+            background: linear-gradient(90deg, #90EE90, #32CD32);
+        }
+        
+        .no-bee-tracked {
+            text-align: center;
+            color: #999;
+            font-style: italic;
+            padding: 20px;
+        }
     </style>
 </head>
 <body>
@@ -329,6 +416,15 @@
     </div>
     
     <div id="tooltip"></div>
+    
+    <div id="trackedBeeStats">
+        <div class="tracked-bee-header">
+            <span class="tracked-bee-title">📊 Tracked Bee Stats</span>
+        </div>
+        <div id="trackedBeeContent">
+            <div class="no-bee-tracked">No bee tracked<br>Click a bee to track it</div>
+        </div>
+    </div>
     
     <div id="controls">
         <div class="control-group">
@@ -422,6 +518,7 @@
             <div class="tips-title">💡 Interactive Tips</div>
             <ul class="tips-list">
                 <li><span class="tip-icon">🖱️</span><strong>Click on a bee</strong> to track it (works when paused too!)</li>
+                <li><span class="tip-icon">📊</span><strong>Tracked bee stats</strong> appear in the side panel for continuous monitoring</li>
                 <li><span class="tip-icon">👆</span><strong>Hover over bees or cells</strong> to see detailed information</li>
                 <li><span class="tip-icon">⚡</span><strong>Adjust speed</strong> to watch in slow motion or fast forward</li>
                 <li><span class="tip-icon">📏</span><strong>Change hive size live</strong> without interrupting the simulation</li>
@@ -481,6 +578,10 @@
         
         // Tooltip
         const tooltip = document.getElementById('tooltip');
+        
+        // Tracked bee stats panel
+        const trackedBeeStats = document.getElementById('trackedBeeStats');
+        const trackedBeeContent = document.getElementById('trackedBeeContent');
         
         // Stats history for graphs
         const statsHistory = {
@@ -1093,9 +1194,123 @@
                 
                 // Update stats
                 updateStats();
+                
+                // Update tracked bee stats panel
+                updateTrackedBeeStats();
             }
             
             requestAnimationFrame(animate);
+        }
+        
+        // Update tracked bee stats panel
+        function updateTrackedBeeStats() {
+            if (!trackedBee) {
+                trackedBeeStats.classList.remove('visible');
+                trackedBeeContent.innerHTML = '<div class="no-bee-tracked">No bee tracked<br>Click a bee to track it</div>';
+                return;
+            }
+            
+            trackedBeeStats.classList.add('visible');
+            
+            const typeNames = {
+                [BEE_TYPES.FORAGER]: 'Forager',
+                [BEE_TYPES.BUILDER]: 'Builder',
+                [BEE_TYPES.NURSE]: 'Nurse'
+            };
+            const typeColors = {
+                [BEE_TYPES.FORAGER]: 'bee-forager',
+                [BEE_TYPES.BUILDER]: 'bee-builder',
+                [BEE_TYPES.NURSE]: 'bee-nurse'
+            };
+            
+            const bee = trackedBee;
+            const distanceToTarget = bee.targetCell ? 
+                Math.sqrt(Math.pow(bee.targetCell.x - bee.x, 2) + Math.pow(bee.targetCell.y - bee.y, 2)) : 0;
+            
+            trackedBeeContent.innerHTML = `
+                <div class="tracked-bee-stats-grid">
+                    <div>
+                        <div class="tracked-stat-item">
+                            <span class="tracked-stat-label">Type</span>
+                            <span class="tracked-stat-value">
+                                <span class="bee-type-badge ${typeColors[bee.type]}">${typeNames[bee.type]}</span>
+                            </span>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <div class="tracked-stat-item">
+                            <span class="tracked-stat-label">State</span>
+                            <span class="tracked-stat-value">${bee.state}</span>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <div class="tracked-stat-item">
+                            <span class="tracked-stat-label">Carrying</span>
+                            <span class="tracked-stat-value">${bee.carrying ? 'Nectar/Pollen' : 'Empty'}</span>
+                        </div>
+                        ${bee.carrying ? `
+                        <div class="tracked-stat-bar">
+                            <div class="tracked-stat-bar-fill honey" style="width: 100%"></div>
+                        </div>
+                        ` : ''}
+                    </div>
+                    
+                    <div>
+                        <div class="tracked-stat-item">
+                            <span class="tracked-stat-label">Speed</span>
+                            <span class="tracked-stat-value">${bee.speed.toFixed(2)}</span>
+                        </div>
+                        <div class="tracked-stat-bar">
+                            <div class="tracked-stat-bar-fill" style="width: ${(bee.speed / 5) * 100}%"></div>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <div class="tracked-stat-item">
+                            <span class="tracked-stat-label">Efficiency</span>
+                            <span class="tracked-stat-value">${(bee.efficiency * 100).toFixed(0)}%</span>
+                        </div>
+                        <div class="tracked-stat-bar">
+                            <div class="tracked-stat-bar-fill efficiency" style="width: ${bee.efficiency * 100}%"></div>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <div class="tracked-stat-item">
+                            <span class="tracked-stat-label">Position</span>
+                            <span class="tracked-stat-value">(${Math.round(bee.x)}, ${Math.round(bee.y)})</span>
+                        </div>
+                    </div>
+                    
+                    ${bee.targetCell ? `
+                    <div>
+                        <div class="tracked-stat-item">
+                            <span class="tracked-stat-label">Target Distance</span>
+                            <span class="tracked-stat-value">${Math.round(distanceToTarget)}px</span>
+                        </div>
+                        <div class="tracked-stat-bar">
+                            <div class="tracked-stat-bar-fill" style="width: ${Math.min(100, (1 - distanceToTarget / 200) * 100)}%"></div>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <div class="tracked-stat-item">
+                            <span class="tracked-stat-label">Target Cell</span>
+                            <span class="tracked-stat-value">(${bee.targetCell.q}, ${bee.targetCell.r})</span>
+                        </div>
+                    </div>
+                    ` : `
+                    <div>
+                        <div class="tracked-stat-item">
+                            <span class="tracked-stat-label">Status</span>
+                            <span class="tracked-stat-value" style="color: #999;">Exploring</span>
+                        </div>
+                    </div>
+                    `}
+                </div>
+            `;
         }
         
         // Event listeners
@@ -1198,6 +1413,7 @@
         
         document.getElementById('clearTrackingBtn').addEventListener('click', () => {
             trackedBee = null;
+            updateTrackedBeeStats(); // Update stats panel
         });
         
         // Mouse move for tooltips
@@ -1255,10 +1471,11 @@
             const bee = getBeeAtPosition(e.clientX, e.clientY);
             if (bee) {
                 trackedBee = bee;
+                updateTrackedBeeStats(); // Update stats panel immediately
                 // Show confirmation tooltip briefly
                 const content = `
                     <div class="tooltip-title">✅ Tracking ${bee.type === BEE_TYPES.FORAGER ? 'Forager' : bee.type === BEE_TYPES.BUILDER ? 'Builder' : 'Nurse'}</div>
-                    <div class="tooltip-item">Click "Clear Tracking" to stop</div>
+                    <div class="tooltip-item">Stats shown in side panel</div>
                 `;
                 showTooltip(e.clientX, e.clientY, content);
                 setTimeout(() => {
@@ -1293,6 +1510,7 @@
             } else {
                 // Clicked on empty space - clear tracking
                 trackedBee = null;
+                updateTrackedBeeStats(); // Update stats panel
             }
         });
         
