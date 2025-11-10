@@ -501,6 +501,23 @@
             </div>
         </div>
         
+        <div class="control-group">
+            <label for="temperature">Temperature: <span id="temperatureValue">25</span>°C</label>
+            <div class="slider-container">
+                <input type="range" id="temperature" min="0" max="45" value="25" step="1">
+            </div>
+            <div style="font-size: 11px; color: #666; margin-top: 5px;">
+                Optimal: 20-30°C • Affects bee activity
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <label>
+                <input type="checkbox" id="enableSwarming" checked>
+                Enable Swarming (hive splits when overcrowded)
+            </label>
+        </div>
+        
         <div class="button-group">
             <button id="resetBtn">Reset Simulation</button>
             <button id="pauseBtn">Pause</button>
@@ -606,6 +623,25 @@
             </div>
         </div>
         
+        <div class="stats" style="margin-top: 10px;">
+            <div class="stat-item">
+                <div class="stat-label">🌍 Season</div>
+                <div class="stat-value" id="seasonDisplay">Summer</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">🌡️ Temperature</div>
+                <div class="stat-value" id="temperatureDisplay">25°C</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label" id="dayNightDisplay">☀️ Day</div>
+                <div class="stat-value" style="font-size: 14px;" id="dayNightStatus">Active</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">🏠 Hive Temp</div>
+                <div class="stat-value" id="hiveTempDisplay">35°C</div>
+            </div>
+        </div>
+        
         <div class="tips">
             <div class="tips-title">💡 Interactive Tips</div>
             <ul class="tips-list">
@@ -648,13 +684,27 @@
             colonySize: 10,
             resourceAvailability: 50,
             maxRings: 8,
-            simulationSpeed: 0.5,
+            simulationSpeed: 0.25,
             isPaused: false,
             beeNaming: {
                 enabled: true,
                 format: 'mixed' // 'number', 'name', or 'mixed'
-            }
+            },
+            // Environmental factors
+            season: 'summer', // 'spring', 'summer', 'fall', 'winter'
+            temperature: 25, // Celsius (affects bee activity)
+            isDay: true, // Day/night cycle
+            // Hive management
+            hiveHealth: 100, // 0-100, affects colony efficiency
+            enableSwarming: true
         };
+        
+        // Environmental state
+        let seasonProgress = 0; // 0-1, cycles through seasons
+        let dayNightProgress = 0; // 0-1, cycles through day/night (0=midnight, 0.5=noon)
+        let hiveTemperature = 35; // Target hive temperature (bees maintain ~35°C)
+        let fanningBees = []; // Bees actively fanning for temperature control
+        let swarmingThreshold = 0.9; // Bees/cell ratio to trigger swarming
         
         // Hexagon cells
         const cells = [];
@@ -1011,6 +1061,21 @@
             const isOvercrowded = builtCells > 0 && (bees.length / builtCells) > OVERCROWDING_THRESHOLD;
             
             bees.forEach(bee => {
+                // Skip fanning bees (they're busy regulating temperature)
+                if (bee.state === 'fanning') {
+                    // Fanning animation - stay in place, move wings rapidly
+                    bee.angle += 0.1 * speedMultiplier;
+                    return;
+                }
+                
+                // Bees rest at night (reduced activity)
+                if (!config.isDay && bee.type !== BEE_TYPES.DRONE && bee.type !== BEE_TYPES.QUEEN) {
+                    // Slower movement at night
+                    if (Math.random() < 0.7) {
+                        return; // Most bees rest
+                    }
+                }
+                
                 // Handle waggle dance
                 if (bee.isDancing) {
                     bee.danceCountdown -= speedMultiplier;
@@ -1204,8 +1269,9 @@
                                 bee.targetCell = null;
                             }
                         } else if (bee.state === 'foraging') {
-                            // Foragers collect resources
-                            bee.carrying = Math.random() < (config.resourceAvailability / 100) * bee.efficiency;
+                            // Foragers collect resources (affected by environmental factors)
+                            const effectiveResource = config.effectiveResourceAvailability || config.resourceAvailability;
+                            bee.carrying = Math.random() < (effectiveResource / 100) * bee.efficiency;
                             if (bee.carrying && bee.type === BEE_TYPES.FORAGER) {
                                 // Perform waggle dance to share resource location
                                 bee.isDancing = true;
@@ -1305,7 +1371,8 @@
                 // Gradually build cells from center outward
                 if (cell.buildProgress < 1) {
                     const distanceFromCenter = Math.sqrt(cell.q * cell.q + cell.r * cell.r);
-                    const buildRate = (config.resourceAvailability / 100) * 0.003;
+                    const effectiveResource = config.effectiveResourceAvailability || config.resourceAvailability;
+                    const buildRate = (effectiveResource / 100) * 0.003;
                     
                     // Cells closer to center build faster
                     if (distanceFromCenter < 2) {
@@ -1516,7 +1583,17 @@
             ctx.stroke();
             
             // Wings
-            const wingFlap = Math.sin(Date.now() / 50) * 0.3;
+            let wingFlap = Math.sin(Date.now() / 50) * 0.3;
+            if (bee.state === 'fanning') {
+                // Rapid wing movement for fanning
+                wingFlap = Math.sin(Date.now() / 20) * 0.8;
+                // Draw fanning indicator
+                ctx.strokeStyle = 'rgba(135, 206, 250, 0.6)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(0, 0, 10, 0, Math.PI * 2);
+                ctx.stroke();
+            }
             ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
             ctx.beginPath();
             ctx.ellipse(-2, -2, 4, 2, -0.5 + wingFlap, 0, Math.PI * 2);
@@ -1712,6 +1789,124 @@
             }
         }
         
+        // Update environmental factors
+        function updateEnvironmentalFactors() {
+            const speedMultiplier = config.simulationSpeed;
+            
+            // Update season progress (slow cycle)
+            seasonProgress += 0.0001 * speedMultiplier;
+            if (seasonProgress >= 1) seasonProgress = 0;
+            
+            // Determine current season
+            const seasonIndex = Math.floor(seasonProgress * 4);
+            const seasons = ['spring', 'summer', 'fall', 'winter'];
+            config.season = seasons[seasonIndex];
+            
+            // Update day/night cycle (faster cycle)
+            dayNightProgress += 0.001 * speedMultiplier;
+            if (dayNightProgress >= 1) dayNightProgress = 0;
+            config.isDay = dayNightProgress < 0.5 || dayNightProgress > 0.75; // Day from 0-0.5 and 0.75-1
+            
+            // Calculate seasonal resource multiplier
+            let seasonalMultiplier = 1.0;
+            switch(config.season) {
+                case 'spring': seasonalMultiplier = 1.2; break; // Bloom season
+                case 'summer': seasonalMultiplier = 1.0; break; // Normal
+                case 'fall': seasonalMultiplier = 0.8; break; // Scarcity
+                case 'winter': seasonalMultiplier = 0.5; break; // Very scarce
+            }
+            
+            // Temperature affects bee activity (optimal: 20-30°C)
+            let temperatureMultiplier = 1.0;
+            if (config.temperature < 10) {
+                temperatureMultiplier = 0.3; // Too cold
+            } else if (config.temperature < 20) {
+                temperatureMultiplier = 0.6 + (config.temperature - 10) * 0.04; // Cold
+            } else if (config.temperature <= 30) {
+                temperatureMultiplier = 1.0; // Optimal
+            } else if (config.temperature <= 40) {
+                temperatureMultiplier = 1.0 - (config.temperature - 30) * 0.05; // Hot
+            } else {
+                temperatureMultiplier = 0.5; // Too hot
+            }
+            
+            // Day/night affects activity
+            const dayNightMultiplier = config.isDay ? 1.0 : 0.3; // Bees rest at night
+            
+            // Update effective resource availability
+            config.effectiveResourceAvailability = config.resourceAvailability * seasonalMultiplier * temperatureMultiplier * dayNightMultiplier;
+            
+            // Hive temperature regulation
+            const targetTemp = 35; // Bees maintain ~35°C
+            const tempDiff = config.temperature - targetTemp;
+            
+            // Bees cluster when cold, fan when hot
+            if (tempDiff < -5) {
+                // Too cold - bees cluster (reduce activity)
+                hiveTemperature = targetTemp + tempDiff * 0.1; // Bees generate heat
+            } else if (tempDiff > 5) {
+                // Too hot - bees fan (some bees stop working to fan)
+                hiveTemperature = targetTemp + tempDiff * 0.3; // Fanning helps cool
+                // Assign fanning bees
+                if (fanningBees.length < bees.length * 0.1) { // 10% of bees fan
+                    const availableBees = bees.filter(b => 
+                        b.type !== BEE_TYPES.DRONE && 
+                        b.type !== BEE_TYPES.QUEEN &&
+                        !fanningBees.includes(b)
+                    );
+                    if (availableBees.length > 0) {
+                        const fanningBee = availableBees[Math.floor(Math.random() * availableBees.length)];
+                        fanningBees.push(fanningBee);
+                        fanningBee.state = 'fanning';
+                        fanningBee.targetCell = null;
+                    }
+                }
+            } else {
+                // Normal temperature
+                hiveTemperature = targetTemp;
+                // Release fanning bees
+                fanningBees.forEach(bee => {
+                    bee.state = 'exploring';
+                });
+                fanningBees = [];
+            }
+        }
+        
+        // Check for swarming behavior
+        function checkSwarming() {
+            if (!config.enableSwarming) return;
+            
+            const builtCells = cells.filter(c => c.buildProgress === 1).length;
+            if (builtCells === 0) return;
+            
+            const beeToCellRatio = bees.length / builtCells;
+            
+            if (beeToCellRatio > swarmingThreshold && bees.length > 15) {
+                // Swarm! Remove 30-40% of bees (simulating swarm leaving)
+                const swarmSize = Math.floor(bees.length * (0.3 + Math.random() * 0.1));
+                const workersToSwarm = bees.filter(b => 
+                    b.type !== BEE_TYPES.QUEEN && 
+                    b.type !== BEE_TYPES.DRONE
+                );
+                
+                if (workersToSwarm.length >= swarmSize) {
+                    // Remove bees (simulating swarm departure)
+                    for (let i = 0; i < swarmSize; i++) {
+                        const index = bees.indexOf(workersToSwarm[Math.floor(Math.random() * workersToSwarm.length)]);
+                        if (index > -1) {
+                            bees.splice(index, 1);
+                        }
+                    }
+                    
+                    // Reset swarming threshold temporarily
+                    swarmingThreshold = 0.95; // Higher threshold after swarming
+                    setTimeout(() => {
+                        swarmingThreshold = 0.9; // Reset after delay
+                    }, 10000);
+                }
+            }
+        }
+        
         // Update statistics
         function updateStats() {
             const totalBuilt = cells.filter(c => c.buildProgress === 1).length;
@@ -1738,6 +1933,23 @@
             document.getElementById('larvaCount').textContent = larvae;
             document.getElementById('pupaCount').textContent = pupae;
             document.getElementById('queenEggs').textContent = queenBee ? queenBee.eggsLaid : 0;
+            
+            // Update environmental stats display
+            if (document.getElementById('seasonDisplay')) {
+                document.getElementById('seasonDisplay').textContent = config.season.charAt(0).toUpperCase() + config.season.slice(1);
+            }
+            if (document.getElementById('temperatureDisplay')) {
+                document.getElementById('temperatureDisplay').textContent = `${Math.round(config.temperature)}°C`;
+            }
+            if (document.getElementById('dayNightDisplay')) {
+                document.getElementById('dayNightDisplay').textContent = config.isDay ? '☀️ Day' : '🌙 Night';
+            }
+            if (document.getElementById('dayNightStatus')) {
+                document.getElementById('dayNightStatus').textContent = config.isDay ? 'Active' : 'Resting';
+            }
+            if (document.getElementById('hiveTempDisplay')) {
+                document.getElementById('hiveTempDisplay').textContent = `${Math.round(hiveTemperature)}°C`;
+            }
             
             // Update stats history for graphing
             statsHistory.totalCells.push(totalBuilt);
@@ -1867,9 +2079,19 @@
         // Animation loop
         function animate() {
             if (!config.isPaused) {
-                // Clear canvas
-                ctx.fillStyle = '#FFF9E6';
+                // Clear canvas with day/night background
+                if (config.isDay) {
+                    ctx.fillStyle = '#FFF9E6'; // Light yellow (day)
+                } else {
+                    ctx.fillStyle = '#2C3E50'; // Dark blue-gray (night)
+                }
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                // Update environmental factors
+                updateEnvironmentalFactors();
+                
+                // Check for swarming
+                checkSwarming();
                 
                 // Update
                 updateCells();
@@ -2388,6 +2610,15 @@
             document.getElementById('speedValue').textContent = config.simulationSpeed.toFixed(2);
         });
         
+        document.getElementById('temperature').addEventListener('input', (e) => {
+            config.temperature = parseInt(e.target.value);
+            document.getElementById('temperatureValue').textContent = config.temperature;
+        });
+        
+        document.getElementById('enableSwarming').addEventListener('change', (e) => {
+            config.enableSwarming = e.target.checked;
+        });
+        
         document.getElementById('clearTrackingBtn').addEventListener('click', () => {
             trackedBee = null;
             trackedCell = null;
@@ -2598,6 +2829,9 @@
         // Initialize UI controls to match config
         document.getElementById('beeNamingEnabled').checked = config.beeNaming.enabled;
         document.getElementById('beeNamingFormat').value = config.beeNaming.format;
+        document.getElementById('temperature').value = config.temperature;
+        document.getElementById('temperatureValue').textContent = config.temperature;
+        document.getElementById('enableSwarming').checked = config.enableSwarming;
         
         initializeGrid();
         initializeQueen();

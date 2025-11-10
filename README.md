@@ -74,12 +74,35 @@ An interactive, real-time simulation of honeybee colony behavior and honeycomb c
 - **Age Tracking**: Each cell maintains its age and construction progress
 - **Population Growth**: New bees emerge from pupae, expanding the colony naturally
 - **Royal Jelly**: Special substance produced by queen for developing bees
+- **Swarming Behavior**: When hive becomes overcrowded (bees/cell ratio > 0.9), 30-40% of workers leave to form a new colony
+- **Temperature Regulation**: Bees automatically cluster when cold or fan when hot to maintain optimal hive temperature (~35°C)
+
+### 🌍 Environmental Factors
+- **Seasonal Variations**: Automatic cycling through spring, summer, fall, and winter
+  - **Spring**: 20% resource bonus (bloom season)
+  - **Summer**: Normal resource availability
+  - **Fall**: 20% resource reduction (scarcity)
+  - **Winter**: 50% resource reduction (very scarce)
+- **Temperature Effects**: Ambient temperature affects bee activity levels
+  - **Optimal Range**: 20-30°C (100% activity)
+  - **Cold Weather**: Below 20°C reduces activity (minimum 30% at 0°C)
+  - **Hot Weather**: Above 30°C reduces activity (minimum 50% at 45°C)
+- **Day/Night Cycle**: Automatic day and night transitions
+  - **Day**: Full bee activity (100%)
+  - **Night**: Reduced activity (30% - most bees rest)
+  - **Visual**: Background changes from light yellow (day) to dark blue-gray (night)
+- **Hive Temperature Regulation**: Bees maintain internal hive temperature
+  - **Too Cold**: Bees cluster together to generate heat
+  - **Too Hot**: 10% of bees stop working to fan and cool the hive
+  - **Visual Indicator**: Fanning bees show blue circular indicator with rapid wing movement
 
 ### 🎮 Interactive Controls
 - **Colony Size Slider**: Adjust the number of active bees (5-50 bees)
 - **Resource Availability**: Control the rate of resource gathering (10-100%)
 - **Hive Size Slider**: Set the maximum hive size (3-15 rings) with live resizing
 - **Simulation Speed**: Control time flow (0.25x to 4x speed)
+- **Temperature Control**: Adjust ambient temperature (0-45°C) affecting bee activity
+- **Swarming Toggle**: Enable/disable automatic hive splitting when overcrowded
 - **Bee Naming**: Enable/disable random names for bees with configurable formats
   - **Mixed Format**: Combination of numbers (e.g., `forager#001`) and names (e.g., `forager-ben`)
   - **Numbers Only**: Sequential IDs like `forager#001`, `builder#002`, `nurse#003`
@@ -96,6 +119,7 @@ An interactive, real-time simulation of honeybee colony behavior and honeycomb c
 - **Hive Size**: Current radius of the hive in rings
 - **Active Bees**: Current bee population (grows as new bees emerge)
 - **Lifecycle Tracking**: Visual indicators for eggs, larvae, and pupae
+- **Environmental Stats**: Current season, temperature, day/night status, and hive temperature
 - **Growth Trends Chart**: Live mini-graph showing colony growth over time
   - Purple line: Total cells built
   - Gold line: Honey cells filled
@@ -112,7 +136,7 @@ An interactive, real-time simulation of honeybee colony behavior and honeycomb c
 - Real-time interactive tooltips with detailed information
 - Visual tracking indicators (golden rings for bees, blue glow for cells)
 - Dynamic speed control feedback
-- Default 0.5x speed for easier observation
+- Default 0.25x speed for easier observation
 
 ## 🚀 Getting Started
 
@@ -285,7 +309,7 @@ const config = {
     colonySize: 10,           // Starting number of bees
     resourceAvailability: 50, // Starting resource level
     maxRings: 8,              // Maximum hive size (number of rings)
-    simulationSpeed: 0.5,     // Simulation time multiplier (0.25x to 4x)
+    simulationSpeed: 0.25,     // Simulation time multiplier (0.25x to 4x)
     beeNaming: {
         enabled: true,        // Enable/disable bee naming
         format: 'mixed'       // 'number', 'name', or 'mixed'
@@ -319,9 +343,11 @@ This simulation demonstrates:
 - **📏 Live Hive Resizing**: Adjust hive size without interrupting the simulation
 - **📊 Statistics Tracking**: Monitor colony metrics in real-time
 - **📈 Growth Trends Chart**: Live mini-graph showing colony expansion and honey production
-- **🐝 Worker Specialization**: Three bee types (Foragers, Builders, Nurses) with unique behaviors and colors
+- **🐝 Worker Specialization**: Five bee types (Foragers, Builders, Nurses, Scouts, Drones) with unique behaviors and colors
 - **👑 Queen Bee**: Royal bee that lays eggs and produces royal jelly
 - **🔄 Bee Lifecycle**: Complete development cycle from egg to adult bee
+- **🌍 Environmental Factors**: Seasonal variations, temperature effects, and day/night cycles
+- **🏰 Hive Management**: Automatic swarming and temperature regulation behaviors
 
 ### User Experience Improvements  
 - Visual tracking with golden rings and target lines
@@ -350,19 +376,19 @@ Potential features for future versions:
 - [x] **Drone bees** - male bees with different behaviors
 
 ### 🌍 Environmental Factors
-- [ ] **Seasonal resource variations** (spring bloom, summer abundance, winter scarcity)
-- [ ] **Temperature simulation** affecting bee activity and metabolism
+- [x] **Seasonal resource variations** (spring bloom, summer abundance, winter scarcity) ✅
+- [x] **Temperature simulation** affecting bee activity and metabolism ✅
 - [ ] **Weather system** (rain, storms reducing foraging efficiency)
-- [ ] **Day/night cycle** with bees resting at night
+- [x] **Day/night cycle** with bees resting at night ✅
 - [ ] **Flower fields** - visual representation of resource locations
 - [ ] **Nectar vs pollen** - different resource types with different purposes
 
 ### 🏰 Hive Management
 - [ ] **Multiple hive types** (wild vs managed, different shapes)
-- [ ] **Swarming behavior** - hive splitting when too large
+- [x] **Swarming behavior** - hive splitting when too large ✅
 - [ ] **Disease spread** (varroa mites, foulbrood) and hive health
-- [ ] **Hive temperature regulation** (heating/cooling behaviors)
-- [ ] **Ventilation behaviors** (bees fanning to regulate humidity)
+- [x] **Hive temperature regulation** (heating/cooling behaviors) ✅
+- [x] **Ventilation behaviors** (bees fanning to regulate humidity) ✅
 - [ ] **Wax production** - visual representation of cell wall building
 
 ### ⚔️ Threats & Challenges
