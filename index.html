@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Beehive Construction Simulation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        h1 {
+            color: white;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        #canvasContainer {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        canvas {
+            display: block;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+        }
+        
+        #controls {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            width: 800px;
+            max-width: 95%;
+        }
+        
+        .control-group {
+            margin-bottom: 20px;
+        }
+        
+        .control-group label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #333;
+        }
+        
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        input[type="range"] {
+            flex: 1;
+            height: 8px;
+            border-radius: 5px;
+            background: #ddd;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #667eea;
+            cursor: pointer;
+        }
+        
+        input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #667eea;
+            cursor: pointer;
+            border: none;
+        }
+        
+        .value-display {
+            min-width: 60px;
+            text-align: right;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 2px solid #eee;
+        }
+        
+        .stat-item {
+            text-align: center;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        
+        .stat-value {
+            font-size: 20px;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .legend {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 3px;
+            border: 1px solid #ccc;
+        }
+        
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            transition: background 0.3s;
+        }
+        
+        button:hover {
+            background: #5568d3;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .author {
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 14px;
+            margin-top: -10px;
+            margin-bottom: 15px;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
+        }
+    </style>
+</head>
+<body>
+    <h1>🐝 Beehive Construction Simulation</h1>
+    <div class="author">Created by Kyros Koh</div>
+    
+    <div id="canvasContainer">
+        <canvas id="beehiveCanvas" width="800" height="600"></canvas>
+    </div>
+    
+    <div id="controls">
+        <div class="control-group">
+            <label for="colonySize">Colony Size: <span id="colonySizeValue">10</span> bees</label>
+            <div class="slider-container">
+                <input type="range" id="colonySize" min="5" max="50" value="10" step="1">
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <label for="resourceAvailability">Resource Availability: <span id="resourceValue">50</span>%</label>
+            <div class="slider-container">
+                <input type="range" id="resourceAvailability" min="10" max="100" value="50" step="5">
+            </div>
+        </div>
+        
+        <div class="button-group">
+            <button id="resetBtn">Reset Simulation</button>
+            <button id="pauseBtn">Pause</button>
+        </div>
+        
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-color" style="background: #fff4e6;"></div>
+                <span>Empty Cell</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #FFD700;"></div>
+                <span>Honey Stored</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #FFA500;"></div>
+                <span>Full Honey</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #E8E8E8;"></div>
+                <span>Brood Cell</span>
+            </div>
+        </div>
+        
+        <div class="stats">
+            <div class="stat-item">
+                <div class="stat-label">Total Cells</div>
+                <div class="stat-value" id="totalCells">0</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">Honey Cells</div>
+                <div class="stat-value" id="honeyCells">0</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">Active Bees</div>
+                <div class="stat-value" id="activeBees">0</div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const canvas = document.getElementById('beehiveCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Configuration
+        const config = {
+            hexSize: 15,
+            centerX: canvas.width / 2,
+            centerY: canvas.height / 2,
+            colonySize: 10,
+            resourceAvailability: 50,
+            isPaused: false
+        };
+        
+        // Hexagon cells
+        const cells = [];
+        const maxRings = 8;
+        
+        // Bees
+        const bees = [];
+        
+        // Cell types
+        const CELL_TYPES = {
+            EMPTY: 'empty',
+            BUILDING: 'building',
+            HONEY: 'honey',
+            BROOD: 'brood'
+        };
+        
+        // Initialize hexagonal grid
+        function initializeGrid() {
+            cells.length = 0;
+            
+            // Center cell
+            cells.push({
+                q: 0,
+                r: 0,
+                x: config.centerX,
+                y: config.centerY,
+                type: CELL_TYPES.EMPTY,
+                honeyLevel: 0,
+                buildProgress: 1,
+                age: 0,
+                transitionProgress: 1,
+                previousType: CELL_TYPES.EMPTY
+            });
+            
+            // Create rings of hexagons
+            for (let ring = 1; ring <= maxRings; ring++) {
+                const hexagons = getHexRing(0, 0, ring);
+                hexagons.forEach(hex => {
+                    const pos = hexToPixel(hex.q, hex.r);
+                    cells.push({
+                        q: hex.q,
+                        r: hex.r,
+                        x: pos.x,
+                        y: pos.y,
+                        type: CELL_TYPES.EMPTY,
+                        honeyLevel: 0,
+                        buildProgress: 0,
+                        age: 0,
+                        transitionProgress: 1,
+                        previousType: CELL_TYPES.EMPTY
+                    });
+                });
+            }
+        }
+        
+        // Get hexagons in a ring
+        function getHexRing(centerQ, centerR, radius) {
+            const results = [];
+            if (radius === 0) return results;
+            
+            let q = centerQ;
+            let r = centerR - radius;
+            
+            const directions = [
+                [1, 0], [0, 1], [-1, 1], [-1, 0], [0, -1], [1, -1]
+            ];
+            
+            for (let i = 0; i < 6; i++) {
+                for (let j = 0; j < radius; j++) {
+                    results.push({ q, r });
+                    q += directions[i][0];
+                    r += directions[i][1];
+                }
+            }
+            
+            return results;
+        }
+        
+        // Convert hex coordinates to pixel coordinates
+        function hexToPixel(q, r) {
+            const size = config.hexSize;
+            const x = config.centerX + size * (3/2 * q);
+            const y = config.centerY + size * (Math.sqrt(3)/2 * q + Math.sqrt(3) * r);
+            return { x, y };
+        }
+        
+        // Draw hexagon
+        function drawHexagon(x, y, size, fillColor, strokeColor = '#8B4513', lineWidth = 2) {
+            ctx.beginPath();
+            for (let i = 0; i < 6; i++) {
+                const angle = Math.PI / 3 * i;
+                const hx = x + size * Math.cos(angle);
+                const hy = y + size * Math.sin(angle);
+                if (i === 0) ctx.moveTo(hx, hy);
+                else ctx.lineTo(hx, hy);
+            }
+            ctx.closePath();
+            ctx.fillStyle = fillColor;
+            ctx.fill();
+            ctx.strokeStyle = strokeColor;
+            ctx.lineWidth = lineWidth;
+            ctx.stroke();
+        }
+        
+        // Initialize bees
+        function initializeBees() {
+            bees.length = 0;
+            for (let i = 0; i < config.colonySize; i++) {
+                bees.push({
+                    x: config.centerX + (Math.random() - 0.5) * 100,
+                    y: config.centerY + (Math.random() - 0.5) * 100,
+                    targetCell: null,
+                    speed: 2 + Math.random() * 2,
+                    carrying: Math.random() > 0.5,
+                    angle: Math.random() * Math.PI * 2,
+                    state: 'exploring' // exploring, building, storing
+                });
+            }
+        }
+        
+        // Update bees
+        function updateBees() {
+            bees.forEach(bee => {
+                if (!bee.targetCell || Math.random() < 0.01) {
+                    // Select new target
+                    const builtCells = cells.filter(c => c.buildProgress > 0);
+                    if (builtCells.length > 0) {
+                        // Prioritize cells based on bee state
+                        if (bee.carrying) {
+                            // Find cells to store honey
+                            const emptyCells = builtCells.filter(c => 
+                                c.buildProgress === 1 && 
+                                c.honeyLevel < 1 && 
+                                c.type !== CELL_TYPES.BROOD
+                            );
+                            bee.targetCell = emptyCells[Math.floor(Math.random() * emptyCells.length)] || 
+                                           builtCells[Math.floor(Math.random() * builtCells.length)];
+                            bee.state = 'storing';
+                        } else {
+                            // Find cells to build
+                            const unbuildCells = cells.filter(c => 
+                                c.buildProgress > 0 && 
+                                c.buildProgress < 1
+                            );
+                            bee.targetCell = unbuildCells.length > 0 ? 
+                                           unbuildCells[Math.floor(Math.random() * unbuildCells.length)] :
+                                           builtCells[Math.floor(Math.random() * builtCells.length)];
+                            bee.state = 'building';
+                        }
+                    }
+                }
+                
+                // Move towards target
+                if (bee.targetCell) {
+                    const dx = bee.targetCell.x - bee.x;
+                    const dy = bee.targetCell.y - bee.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (distance > 5) {
+                        bee.x += (dx / distance) * bee.speed;
+                        bee.y += (dy / distance) * bee.speed;
+                        bee.angle = Math.atan2(dy, dx);
+                    } else {
+                        // Reached target
+                        if (bee.state === 'storing' && bee.carrying) {
+                            bee.targetCell.honeyLevel = Math.min(1, bee.targetCell.honeyLevel + 0.02);
+                            if (bee.targetCell.honeyLevel > 0.3 && bee.targetCell.type !== CELL_TYPES.HONEY) {
+                                bee.targetCell.previousType = bee.targetCell.type;
+                                bee.targetCell.type = CELL_TYPES.HONEY;
+                                bee.targetCell.transitionProgress = 0;
+                            }
+                            bee.carrying = false;
+                        } else if (bee.state === 'building') {
+                            // Leave and collect resources
+                            bee.carrying = Math.random() < (config.resourceAvailability / 100);
+                            bee.targetCell = null;
+                        }
+                    }
+                }
+                
+                // Add some wandering
+                bee.angle += (Math.random() - 0.5) * 0.3;
+            });
+        }
+        
+        // Update cells
+        function updateCells() {
+            cells.forEach(cell => {
+                cell.age++;
+                
+                // Gradually build cells from center outward
+                if (cell.buildProgress < 1) {
+                    const distanceFromCenter = Math.sqrt(cell.q * cell.q + cell.r * cell.r);
+                    const buildRate = (config.resourceAvailability / 100) * 0.003;
+                    
+                    // Cells closer to center build faster
+                    if (distanceFromCenter < 2) {
+                        cell.buildProgress = Math.min(1, cell.buildProgress + buildRate * 2);
+                    } else {
+                        // Check if neighboring cells are built
+                        const neighbors = getNeighbors(cell.q, cell.r);
+                        const builtNeighbors = neighbors.filter(n => n && n.buildProgress === 1).length;
+                        
+                        if (builtNeighbors > 0) {
+                            cell.buildProgress = Math.min(1, cell.buildProgress + buildRate * (builtNeighbors / 3));
+                        }
+                    }
+                }
+                
+                // Randomly convert some cells to brood
+                if (cell.buildProgress === 1 && cell.type === CELL_TYPES.EMPTY && Math.random() < 0.0005) {
+                    cell.previousType = cell.type;
+                    cell.type = CELL_TYPES.BROOD;
+                    cell.transitionProgress = 0;
+                }
+                
+                // Brood cells mature and become empty again after some time
+                if (cell.type === CELL_TYPES.BROOD && cell.age > 2000 && Math.random() < 0.001) {
+                    cell.previousType = cell.type;
+                    cell.type = CELL_TYPES.EMPTY;
+                    cell.transitionProgress = 0;
+                    cell.age = 0;
+                }
+                
+                // Update transition progress
+                if (cell.transitionProgress < 1) {
+                    cell.transitionProgress = Math.min(1, cell.transitionProgress + 0.01);
+                }
+            });
+        }
+        
+        // Get neighboring cells
+        function getNeighbors(q, r) {
+            const directions = [
+                [1, 0], [0, 1], [-1, 1], [-1, 0], [0, -1], [1, -1]
+            ];
+            return directions.map(([dq, dr]) => {
+                return cells.find(c => c.q === q + dq && c.r === r + dr);
+            });
+        }
+        
+        // Draw bee
+        function drawBee(bee) {
+            ctx.save();
+            ctx.translate(bee.x, bee.y);
+            ctx.rotate(bee.angle);
+            
+            // Body
+            ctx.fillStyle = bee.carrying ? '#FFD700' : '#FFA500';
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 6, 4, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Stripes
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(-2, -3);
+            ctx.lineTo(-2, 3);
+            ctx.moveTo(2, -3);
+            ctx.lineTo(2, 3);
+            ctx.stroke();
+            
+            // Wings
+            const wingFlap = Math.sin(Date.now() / 50) * 0.3;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+            ctx.beginPath();
+            ctx.ellipse(-2, -2, 4, 2, -0.5 + wingFlap, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(-2, 2, 4, 2, 0.5 - wingFlap, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.restore();
+        }
+        
+        // Get color for cell type
+        function getCellColor(type, honeyLevel) {
+            if (type === CELL_TYPES.BROOD) {
+                return { r: 232, g: 232, b: 232 };
+            } else if (type === CELL_TYPES.HONEY) {
+                const intensity = Math.floor(255 - honeyLevel * 100);
+                return { r: 255, g: intensity, b: 0 };
+            } else {
+                return { r: 255, g: 244, b: 230 };
+            }
+        }
+        
+        // Interpolate between two colors
+        function interpolateColor(color1, color2, progress) {
+            const r = Math.floor(color1.r + (color2.r - color1.r) * progress);
+            const g = Math.floor(color1.g + (color2.g - color1.g) * progress);
+            const b = Math.floor(color1.b + (color2.b - color1.b) * progress);
+            return `rgb(${r}, ${g}, ${b})`;
+        }
+        
+        // Draw cell
+        function drawCell(cell) {
+            let fillColor;
+            
+            if (cell.buildProgress === 0) {
+                return; // Don't draw unbuilt cells
+            } else if (cell.buildProgress < 1) {
+                // Building
+                fillColor = `rgba(255, 244, 230, ${cell.buildProgress})`;
+            } else if (cell.transitionProgress < 1) {
+                // Transitioning between cell types
+                const previousColor = getCellColor(cell.previousType, cell.honeyLevel);
+                const currentColor = getCellColor(cell.type, cell.honeyLevel);
+                fillColor = interpolateColor(previousColor, currentColor, cell.transitionProgress);
+            } else if (cell.type === CELL_TYPES.BROOD) {
+                fillColor = '#E8E8E8';
+            } else if (cell.type === CELL_TYPES.HONEY) {
+                const intensity = Math.floor(255 - cell.honeyLevel * 100);
+                fillColor = `rgb(255, ${intensity}, 0)`;
+            } else {
+                fillColor = '#fff4e6';
+            }
+            
+            const size = config.hexSize * cell.buildProgress;
+            drawHexagon(cell.x, cell.y, size, fillColor);
+            
+            // Draw honey level indicator
+            if (cell.honeyLevel > 0 && cell.type !== CELL_TYPES.BROOD) {
+                ctx.fillStyle = '#FFD700';
+                ctx.beginPath();
+                ctx.arc(cell.x, cell.y, size * 0.3 * cell.honeyLevel, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        
+        // Update statistics
+        function updateStats() {
+            const totalBuilt = cells.filter(c => c.buildProgress === 1).length;
+            const honeyFilled = cells.filter(c => c.honeyLevel > 0.5).length;
+            
+            document.getElementById('totalCells').textContent = totalBuilt;
+            document.getElementById('honeyCells').textContent = honeyFilled;
+            document.getElementById('activeBees').textContent = config.colonySize;
+        }
+        
+        // Animation loop
+        function animate() {
+            if (!config.isPaused) {
+                // Clear canvas
+                ctx.fillStyle = '#FFF9E6';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                // Update
+                updateCells();
+                updateBees();
+                
+                // Draw cells
+                cells.forEach(drawCell);
+                
+                // Draw bees
+                bees.forEach(drawBee);
+                
+                // Update stats
+                updateStats();
+            }
+            
+            requestAnimationFrame(animate);
+        }
+        
+        // Event listeners
+        document.getElementById('colonySize').addEventListener('input', (e) => {
+            config.colonySize = parseInt(e.target.value);
+            document.getElementById('colonySizeValue').textContent = config.colonySize;
+            
+            // Adjust bee count
+            while (bees.length < config.colonySize) {
+                bees.push({
+                    x: config.centerX + (Math.random() - 0.5) * 100,
+                    y: config.centerY + (Math.random() - 0.5) * 100,
+                    targetCell: null,
+                    speed: 2 + Math.random() * 2,
+                    carrying: Math.random() > 0.5,
+                    angle: Math.random() * Math.PI * 2,
+                    state: 'exploring'
+                });
+            }
+            while (bees.length > config.colonySize) {
+                bees.pop();
+            }
+        });
+        
+        document.getElementById('resourceAvailability').addEventListener('input', (e) => {
+            config.resourceAvailability = parseInt(e.target.value);
+            document.getElementById('resourceValue').textContent = config.resourceAvailability;
+        });
+        
+        document.getElementById('resetBtn').addEventListener('click', () => {
+            initializeGrid();
+            initializeBees();
+        });
+        
+        document.getElementById('pauseBtn').addEventListener('click', (e) => {
+            config.isPaused = !config.isPaused;
+            e.target.textContent = config.isPaused ? 'Resume' : 'Pause';
+        });
+        
+        // Initialize and start
+        initializeGrid();
+        initializeBees();
+        animate();
+    </script>
+</body>
+</html>
