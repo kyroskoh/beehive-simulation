@@ -482,6 +482,25 @@
         
         <div class="legend" style="margin-top: 10px;">
             <div class="legend-item">
+                <div class="legend-color" style="background: #FFFFC8;"></div>
+                <span>Egg</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #FFC896;"></div>
+                <span>Larva</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #C8C8FF;"></div>
+                <span>Pupa</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #FF69B4; border: 2px solid #FFD700;"></div>
+                <span>Queen Bee</span>
+            </div>
+        </div>
+        
+        <div class="legend" style="margin-top: 10px;">
+            <div class="legend-item">
                 <div class="legend-color" style="background: #FFD700; border: 1px solid #333;"></div>
                 <span>Forager</span>
             </div>
@@ -566,8 +585,12 @@
         // Bees
         const bees = [];
         
+        // Queen bee
+        let queenBee = null;
+        
         // Bee types
         const BEE_TYPES = {
+            QUEEN: 'queen',
             FORAGER: 'forager',
             BUILDER: 'builder',
             NURSE: 'nurse'
@@ -598,7 +621,18 @@
             EMPTY: 'empty',
             BUILDING: 'building',
             HONEY: 'honey',
-            BROOD: 'brood'
+            BROOD: 'brood',
+            EGG: 'egg',
+            LARVA: 'larva',
+            PUPA: 'pupa'
+        };
+        
+        // Lifecycle stages
+        const LIFECYCLE_STAGES = {
+            EGG: 'egg',
+            LARVA: 'larva',
+            PUPA: 'pupa',
+            ADULT: 'adult'
         };
         
         // Initialize hexagonal grid
@@ -616,7 +650,10 @@
                 buildProgress: 1,
                 age: 0,
                 transitionProgress: 1,
-                previousType: CELL_TYPES.EMPTY
+                previousType: CELL_TYPES.EMPTY,
+                lifecycleStage: null,
+                lifecycleProgress: 0,
+                royalJelly: false
             });
             
             // Create rings of hexagons
@@ -634,7 +671,10 @@
                         buildProgress: 0,
                         age: 0,
                         transitionProgress: 1,
-                        previousType: CELL_TYPES.EMPTY
+                        previousType: CELL_TYPES.EMPTY,
+                        lifecycleStage: null,
+                        lifecycleProgress: 0,
+                        royalJelly: false
                     });
                 });
             }
@@ -689,6 +729,21 @@
             ctx.stroke();
         }
         
+        // Initialize queen bee
+        function initializeQueen() {
+            queenBee = {
+                x: config.centerX,
+                y: config.centerY,
+                targetCell: null,
+                speed: 0.5,
+                angle: 0,
+                state: 'laying',
+                eggsLaid: 0,
+                lastEggTime: 0,
+                royalJellyProduction: 0
+            };
+        }
+        
         // Initialize bees with specialization
         function initializeBees() {
             bees.length = 0;
@@ -715,6 +770,53 @@
                     type: beeType,
                     efficiency: beeType === BEE_TYPES.FORAGER ? 1.2 : beeType === BEE_TYPES.BUILDER ? 1.1 : 1.0
                 });
+            }
+        }
+        
+        // Update queen bee
+        function updateQueen() {
+            if (!queenBee) return;
+            
+            const speedMultiplier = config.simulationSpeed;
+            queenBee.lastEggTime += speedMultiplier;
+            
+            // Queen moves slowly around center
+            const wanderAngle = Date.now() / 5000;
+            queenBee.angle = wanderAngle;
+            queenBee.x = config.centerX + Math.cos(wanderAngle) * 30;
+            queenBee.y = config.centerY + Math.sin(wanderAngle) * 30;
+            
+            // Lay eggs in empty brood cells
+            if (queenBee.lastEggTime > 60) { // Lay egg every ~60 frames
+                const emptyBroodCells = cells.filter(c => 
+                    c.buildProgress === 1 && 
+                    c.type === CELL_TYPES.BROOD && 
+                    !c.lifecycleStage
+                );
+                
+                if (emptyBroodCells.length > 0) {
+                    const targetCell = emptyBroodCells[Math.floor(Math.random() * emptyBroodCells.length)];
+                    targetCell.lifecycleStage = LIFECYCLE_STAGES.EGG;
+                    targetCell.lifecycleProgress = 0;
+                    targetCell.type = CELL_TYPES.EGG;
+                    targetCell.previousType = CELL_TYPES.BROOD;
+                    targetCell.transitionProgress = 0;
+                    queenBee.eggsLaid++;
+                    queenBee.lastEggTime = 0;
+                }
+            }
+            
+            // Produce royal jelly occasionally
+            if (Math.random() < 0.001 * speedMultiplier) {
+                const broodCells = cells.filter(c => 
+                    c.lifecycleStage === LIFECYCLE_STAGES.EGG || 
+                    c.lifecycleStage === LIFECYCLE_STAGES.LARVA
+                );
+                if (broodCells.length > 0) {
+                    const cell = broodCells[Math.floor(Math.random() * broodCells.length)];
+                    cell.royalJelly = true;
+                    queenBee.royalJellyProduction++;
+                }
             }
         }
         
@@ -842,6 +944,60 @@
             cells.forEach(cell => {
                 cell.age += speedMultiplier;
                 
+                // Update lifecycle progression
+                if (cell.lifecycleStage) {
+                    cell.lifecycleProgress += 0.01 * speedMultiplier;
+                    
+                    if (cell.lifecycleStage === LIFECYCLE_STAGES.EGG && cell.lifecycleProgress >= 0.33) {
+                        // Egg -> Larva
+                        cell.previousType = cell.type;
+                        cell.lifecycleStage = LIFECYCLE_STAGES.LARVA;
+                        cell.type = CELL_TYPES.LARVA;
+                        cell.lifecycleProgress = 0;
+                        cell.transitionProgress = 0;
+                    } else if (cell.lifecycleStage === LIFECYCLE_STAGES.LARVA && cell.lifecycleProgress >= 0.33) {
+                        // Larva -> Pupa
+                        cell.previousType = cell.type;
+                        cell.lifecycleStage = LIFECYCLE_STAGES.PUPA;
+                        cell.type = CELL_TYPES.PUPA;
+                        cell.lifecycleProgress = 0;
+                        cell.transitionProgress = 0;
+                    } else if (cell.lifecycleStage === LIFECYCLE_STAGES.PUPA && cell.lifecycleProgress >= 0.33) {
+                        // Pupa -> Adult (new bee is born)
+                        cell.previousType = cell.type;
+                        cell.lifecycleStage = null;
+                        cell.type = CELL_TYPES.BROOD;
+                        cell.lifecycleProgress = 0;
+                        cell.transitionProgress = 0;
+                        cell.royalJelly = false;
+                        
+                        // Add new bee to colony
+                        if (bees.length < config.colonySize * 2) { // Max 2x colony size
+                            const rand = Math.random();
+                            let beeType;
+                            if (rand < 0.4) {
+                                beeType = BEE_TYPES.FORAGER;
+                            } else if (rand < 0.75) {
+                                beeType = BEE_TYPES.BUILDER;
+                            } else {
+                                beeType = BEE_TYPES.NURSE;
+                            }
+                            
+                            bees.push({
+                                x: cell.x + (Math.random() - 0.5) * 20,
+                                y: cell.y + (Math.random() - 0.5) * 20,
+                                targetCell: null,
+                                speed: beeType === BEE_TYPES.FORAGER ? 3 + Math.random() * 2 : 2 + Math.random() * 2,
+                                carrying: false,
+                                angle: Math.random() * Math.PI * 2,
+                                state: 'exploring',
+                                type: beeType,
+                                efficiency: beeType === BEE_TYPES.FORAGER ? 1.2 : beeType === BEE_TYPES.BUILDER ? 1.1 : 1.0
+                            });
+                        }
+                    }
+                }
+                
                 // Gradually build cells from center outward
                 if (cell.buildProgress < 1) {
                     const distanceFromCenter = Math.sqrt(cell.q * cell.q + cell.r * cell.r);
@@ -861,8 +1017,8 @@
                     }
                 }
                 
-                // Randomly convert some cells to brood
-                if (cell.buildProgress === 1 && cell.type === CELL_TYPES.EMPTY && Math.random() < 0.0005) {
+                // Randomly convert some cells to brood (if not already a lifecycle cell)
+                if (cell.buildProgress === 1 && cell.type === CELL_TYPES.EMPTY && !cell.lifecycleStage && Math.random() < 0.0005) {
                     cell.previousType = cell.type;
                     cell.type = CELL_TYPES.BROOD;
                     cell.transitionProgress = 0;
@@ -891,6 +1047,45 @@
             return directions.map(([dq, dr]) => {
                 return cells.find(c => c.q === q + dq && c.r === r + dr);
             });
+        }
+        
+        // Draw queen bee
+        function drawQueen() {
+            if (!queenBee) return;
+            
+            ctx.save();
+            ctx.translate(queenBee.x, queenBee.y);
+            
+            // Larger size for queen
+            const queenSize = 10;
+            
+            // Crown/royal indicator
+            ctx.fillStyle = '#FFD700';
+            ctx.beginPath();
+            ctx.moveTo(0, -queenSize - 3);
+            ctx.lineTo(-3, -queenSize);
+            ctx.lineTo(0, -queenSize + 2);
+            ctx.lineTo(3, -queenSize);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Body - larger and more regal
+            ctx.fillStyle = '#FF69B4'; // Pink/magenta for queen
+            ctx.beginPath();
+            ctx.ellipse(0, 0, queenSize, queenSize * 0.7, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Stripes
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(-3, -queenSize * 0.7);
+            ctx.lineTo(-3, queenSize * 0.7);
+            ctx.moveTo(3, -queenSize * 0.7);
+            ctx.lineTo(3, queenSize * 0.7);
+            ctx.stroke();
+            
+            ctx.restore();
         }
         
         // Draw bee
@@ -977,8 +1172,14 @@
         }
         
         // Get color for cell type
-        function getCellColor(type, honeyLevel) {
-            if (type === CELL_TYPES.BROOD) {
+        function getCellColor(type, honeyLevel, lifecycleStage, royalJelly) {
+            if (type === CELL_TYPES.EGG) {
+                return { r: 255, g: 255, b: 200 }; // Light yellow for eggs
+            } else if (type === CELL_TYPES.LARVA) {
+                return { r: 255, g: 200, b: 150 }; // Light orange for larvae
+            } else if (type === CELL_TYPES.PUPA) {
+                return { r: 200, g: 200, b: 255 }; // Light purple for pupae
+            } else if (type === CELL_TYPES.BROOD) {
                 return { r: 232, g: 232, b: 232 };
             } else if (type === CELL_TYPES.HONEY) {
                 const intensity = Math.floor(255 - honeyLevel * 100);
@@ -1007,9 +1208,15 @@
                 fillColor = `rgba(255, 244, 230, ${cell.buildProgress})`;
             } else if (cell.transitionProgress < 1) {
                 // Transitioning between cell types
-                const previousColor = getCellColor(cell.previousType, cell.honeyLevel);
-                const currentColor = getCellColor(cell.type, cell.honeyLevel);
+                const previousColor = getCellColor(cell.previousType, cell.honeyLevel, cell.lifecycleStage, cell.royalJelly);
+                const currentColor = getCellColor(cell.type, cell.honeyLevel, cell.lifecycleStage, cell.royalJelly);
                 fillColor = interpolateColor(previousColor, currentColor, cell.transitionProgress);
+            } else if (cell.type === CELL_TYPES.EGG) {
+                fillColor = '#FFFFC8'; // Light yellow
+            } else if (cell.type === CELL_TYPES.LARVA) {
+                fillColor = '#FFC896'; // Light orange
+            } else if (cell.type === CELL_TYPES.PUPA) {
+                fillColor = '#C8C8FF'; // Light purple
             } else if (cell.type === CELL_TYPES.BROOD) {
                 fillColor = '#E8E8E8';
             } else if (cell.type === CELL_TYPES.HONEY) {
@@ -1022,8 +1229,40 @@
             const size = config.hexSize * cell.buildProgress;
             drawHexagon(cell.x, cell.y, size, fillColor);
             
+            // Draw lifecycle indicators
+            if (cell.lifecycleStage === LIFECYCLE_STAGES.EGG) {
+                // Draw small white circle for egg
+                ctx.fillStyle = '#FFFFFF';
+                ctx.beginPath();
+                ctx.arc(cell.x, cell.y, size * 0.2, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (cell.lifecycleStage === LIFECYCLE_STAGES.LARVA) {
+                // Draw wiggly larva shape
+                ctx.fillStyle = '#FF8C00';
+                ctx.beginPath();
+                ctx.ellipse(cell.x, cell.y, size * 0.25, size * 0.15, 0, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (cell.lifecycleStage === LIFECYCLE_STAGES.PUPA) {
+                // Draw cocoon shape
+                ctx.fillStyle = '#9370DB';
+                ctx.beginPath();
+                ctx.ellipse(cell.x, cell.y, size * 0.2, size * 0.3, 0, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            // Draw royal jelly indicator (sparkle effect)
+            if (cell.royalJelly) {
+                ctx.fillStyle = 'rgba(255, 215, 0, 0.8)';
+                ctx.beginPath();
+                ctx.arc(cell.x - size * 0.3, cell.y - size * 0.3, 3, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(cell.x + size * 0.3, cell.y + size * 0.3, 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
             // Draw honey level indicator
-            if (cell.honeyLevel > 0 && cell.type !== CELL_TYPES.BROOD) {
+            if (cell.honeyLevel > 0 && cell.type !== CELL_TYPES.BROOD && !cell.lifecycleStage) {
                 ctx.fillStyle = '#FFD700';
                 ctx.beginPath();
                 ctx.arc(cell.x, cell.y, size * 0.3 * cell.honeyLevel, 0, Math.PI * 2);
@@ -1045,10 +1284,14 @@
                 }
             });
             
+            const eggs = cells.filter(c => c.lifecycleStage === LIFECYCLE_STAGES.EGG).length;
+            const larvae = cells.filter(c => c.lifecycleStage === LIFECYCLE_STAGES.LARVA).length;
+            const pupae = cells.filter(c => c.lifecycleStage === LIFECYCLE_STAGES.PUPA).length;
+            
             document.getElementById('totalCells').textContent = totalBuilt;
             document.getElementById('honeyCells').textContent = honeyFilled;
             document.getElementById('hiveSize').textContent = `${maxRing} rings`;
-            document.getElementById('activeBees').textContent = config.colonySize;
+            document.getElementById('activeBees').textContent = bees.length;
             
             // Update stats history for graphing
             statsHistory.totalCells.push(totalBuilt);
@@ -1189,13 +1432,22 @@
                 // Draw cells
                 cells.forEach(drawCell);
                 
+                // Draw queen
+                drawQueen();
+                
                 // Draw bees
                 bees.forEach(drawBee);
+                
+                // Update queen
+                updateQueen();
                 
                 // Update stats
                 updateStats();
                 
                 // Update tracked bee stats panel
+                updateTrackedBeeStats();
+            } else {
+                // Still update stats panel when paused
                 updateTrackedBeeStats();
             }
             
@@ -1398,6 +1650,7 @@
         
         document.getElementById('resetBtn').addEventListener('click', () => {
             initializeGrid();
+            initializeQueen();
             initializeBees();
         });
         
@@ -1448,15 +1701,50 @@
                 `;
                 showTooltip(e.clientX, e.clientY, content);
             } else if (cell && cell.buildProgress > 0) {
+                let lifecycleInfo = '';
+                if (cell.lifecycleStage) {
+                    const stageNames = {
+                        [LIFECYCLE_STAGES.EGG]: 'Egg',
+                        [LIFECYCLE_STAGES.LARVA]: 'Larva',
+                        [LIFECYCLE_STAGES.PUPA]: 'Pupa'
+                    };
+                    lifecycleInfo = `
+                        <div class="tooltip-item">Lifecycle: ${stageNames[cell.lifecycleStage]}</div>
+                        <div class="tooltip-item">Progress: ${(cell.lifecycleProgress * 100).toFixed(0)}%</div>
+                        ${cell.royalJelly ? '<div class="tooltip-item" style="color: #FFD700;">✨ Royal Jelly</div>' : ''}
+                    `;
+                }
+                
                 const content = `
                     <div class="tooltip-title">🔷 Hexagonal Cell</div>
                     <div class="tooltip-item">Type: ${cell.type}</div>
+                    ${lifecycleInfo}
                     <div class="tooltip-item">Build Progress: ${(cell.buildProgress * 100).toFixed(0)}%</div>
                     <div class="tooltip-item">Honey Level: ${(cell.honeyLevel * 100).toFixed(0)}%</div>
                     <div class="tooltip-item">Age: ${Math.round(cell.age)} frames</div>
                     <div class="tooltip-item">Coordinates: (${cell.q}, ${cell.r})</div>
                 `;
                 showTooltip(e.clientX, e.clientY, content);
+            } else if (queenBee) {
+                const rect = canvas.getBoundingClientRect();
+                const canvasX = e.clientX - rect.left;
+                const canvasY = e.clientY - rect.top;
+                const dx = canvasX - queenBee.x;
+                const dy = canvasY - queenBee.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance < 15) {
+                    const content = `
+                        <div class="tooltip-title">👑 Queen Bee</div>
+                        <div class="tooltip-item">State: ${queenBee.state}</div>
+                        <div class="tooltip-item">Eggs Laid: ${queenBee.eggsLaid}</div>
+                        <div class="tooltip-item">Royal Jelly Produced: ${queenBee.royalJellyProduction}</div>
+                        <div class="tooltip-item">Position: (${Math.round(queenBee.x)}, ${Math.round(queenBee.y)})</div>
+                    `;
+                    showTooltip(e.clientX, e.clientY, content);
+                } else {
+                    hideTooltip();
+                }
             } else {
                 hideTooltip();
             }
@@ -1516,6 +1804,7 @@
         
         // Initialize and start
         initializeGrid();
+        initializeQueen();
         initializeBees();
         updateChart(); // Initialize chart
         animate();

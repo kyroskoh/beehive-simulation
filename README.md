@@ -19,10 +19,23 @@ An interactive, real-time simulation of honeybee colony behavior and honeycomb c
 - **Neighbor-Dependent Expansion**: New cells build faster when adjacent cells are complete
 
 ### 🐝 Realistic Bee Behavior
+- **👑 Queen Bee**: Special royal bee with unique behaviors:
+  - Lays eggs in brood cells automatically
+  - Produces royal jelly for developing larvae
+  - Moves slowly around hive center
+  - Distinctive pink/magenta color with golden crown
+  - Tracks eggs laid and royal jelly production
 - **Worker Bee Specialization**: Three distinct bee types with unique behaviors:
   - **Foragers** (40%): Fast-moving bees focused on collecting nectar and pollen
   - **Builders** (35%): Specialized in constructing new cells efficiently
   - **Nurses** (25%): Care for brood cells and tend to larvae
+- **Bee Lifecycle System**: Complete lifecycle simulation:
+  - **Eggs**: Laid by queen in brood cells (light yellow)
+  - **Larvae**: Develop from eggs, fed by nurses (light orange)
+  - **Pupae**: Transform in cocoons (light purple)
+  - **Adult Bees**: Emerge as new workers, join the colony
+  - Each stage progresses automatically with visual indicators
+- **Royal Jelly Production**: Queen produces royal jelly for developing bees (golden sparkles)
 - **Type-Specific Efficiency**: Each bee type has optimized performance in their specialty
 - **Autonomous Agents**: Each bee operates independently with its own decision-making
 - **Task Switching**: Bees adapt their tasks based on colony needs
@@ -37,8 +50,11 @@ An interactive, real-time simulation of honeybee colony behavior and honeycomb c
 
 ### 🏠 Colony Management
 - **Brood Cells**: Random cells are designated for raising young bees (shown in gray)
-- **Cell States**: Empty, building, honey storage, and brood cell types
+- **Lifecycle Cells**: Cells containing developing bees (eggs, larvae, pupae)
+- **Cell States**: Empty, building, honey storage, brood, egg, larva, and pupa cell types
 - **Age Tracking**: Each cell maintains its age and construction progress
+- **Population Growth**: New bees emerge from pupae, expanding the colony naturally
+- **Royal Jelly**: Special substance produced by queen for developing bees
 
 ### 🎮 Interactive Controls
 - **Colony Size Slider**: Adjust the number of active bees (5-50 bees)
@@ -55,7 +71,8 @@ An interactive, real-time simulation of honeybee colony behavior and honeycomb c
 - **Total Cells**: Count of fully constructed hexagonal cells
 - **Honey Cells**: Number of cells containing stored honey
 - **Hive Size**: Current radius of the hive in rings
-- **Active Bees**: Current bee population in the colony
+- **Active Bees**: Current bee population (grows as new bees emerge)
+- **Lifecycle Tracking**: Visual indicators for eggs, larvae, and pupae
 - **Growth Trends Chart**: Live mini-graph showing colony growth over time
   - Purple line: Total cells built
   - Gold line: Honey cells filled
@@ -151,17 +168,24 @@ The deployment happens automatically on every push to the main branch, or you ca
    - Bee information: type (Forager/Builder/Nurse), state, carrying status, speed, efficiency, position
    - Cell information: type, build progress, honey level, age, coordinates
 8. **Observe Bee Specialization**: Watch how different bee types work:
+   - **Queen Bee** (pink with crown): Lays eggs and produces royal jelly
    - **Foragers** (golden/orange): Fast movers collecting resources
    - **Builders** (dark orange): Focused on cell construction
-   - **Nurses** (green): Tending to brood cells
-9. **Monitor Growth Trends**: Check the mini-chart showing:
+   - **Nurses** (green): Tending to brood cells and developing bees
+9. **Watch Bee Lifecycle**: Observe the complete development process:
+   - Queen lays eggs in brood cells (white circles)
+   - Eggs develop into larvae (orange wiggly shapes)
+   - Larvae transform into pupae (purple cocoons)
+   - Adult bees emerge and join the colony
+   - Royal jelly appears as golden sparkles on developing cells
+10. **Monitor Growth Trends**: Check the mini-chart showing:
    - Colony expansion (purple line)
    - Honey production (gold line)
-10. **Monitor Progress**: Keep track of statistics in the bottom panel:
+11. **Monitor Progress**: Keep track of statistics in the bottom panel:
    - Total Cells, Honey Cells, Hive Size (rings), Active Bees
    - Growth Trends chart showing historical data
-11. **Pause/Resume**: Click the pause button to study the hive structure at any moment
-12. **Reset**: Start over with a fresh hive to observe different growth patterns
+12. **Pause/Resume**: Click the pause button to study the hive structure at any moment
+13. **Reset**: Start over with a fresh hive to observe different growth patterns
 
 ## 🧬 Technical Details
 
@@ -197,8 +221,19 @@ The deployment happens automatically on every push to the main branch, or you ca
 |------|-------|-------------|
 | Empty | Light yellow | Completed but empty cell |
 | Honey | Yellow to Orange | Contains stored honey (color intensity indicates fill level) |
-| Brood | Gray | Cell designated for raising larvae |
+| Brood | Gray | Cell designated for raising young bees |
+| Egg | Light yellow | Contains a developing egg (white circle indicator) |
+| Larva | Light orange | Contains a developing larva (orange wiggly shape) |
+| Pupa | Light purple | Contains a developing pupa (purple cocoon shape) |
 | Building | Translucent | Cell under construction |
+
+### Bee Types
+| Type | Color | Description |
+|------|-------|-------------|
+| Queen | Pink/Magenta | Royal bee that lays eggs and produces royal jelly |
+| Forager | Golden/Orange | Fast-moving resource collectors |
+| Builder | Dark Orange | Construction specialists |
+| Nurse | Green | Caretakers for developing bees |
 
 ## 🎨 Customization
 
@@ -243,6 +278,8 @@ This simulation demonstrates:
 - **📊 Statistics Tracking**: Monitor colony metrics in real-time
 - **📈 Growth Trends Chart**: Live mini-graph showing colony expansion and honey production
 - **🐝 Worker Specialization**: Three bee types (Foragers, Builders, Nurses) with unique behaviors and colors
+- **👑 Queen Bee**: Royal bee that lays eggs and produces royal jelly
+- **🔄 Bee Lifecycle**: Complete development cycle from egg to adult bee
 
 ### User Experience Improvements  
 - Visual tracking with golden rings and target lines
@@ -264,8 +301,8 @@ Potential features for future versions:
 
 ### 🐝 Advanced Bee Behaviors
 - [x] **Worker bee specialization** (foragers, nurses, builders) ✅
-- [ ] **Queen bee** with special behaviors (laying eggs, royal jelly production)
-- [ ] **Bee lifecycle** (eggs → larvae → pupae → adult bees)
+- [x] **Queen bee** with special behaviors (laying eggs, royal jelly production) ✅
+- [x] **Bee lifecycle** (eggs → larvae → pupae → adult bees) ✅
 - [ ] **Waggle dance communication** - bees sharing resource locations
 - [ ] **Scout bees** - exploring for new hive locations when overcrowded
 - [ ] **Drone bees** - male bees with different behaviors
