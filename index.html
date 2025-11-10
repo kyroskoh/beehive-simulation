@@ -180,6 +180,65 @@
             margin-bottom: 15px;
             text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
         }
+        
+        #tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-size: 13px;
+            pointer-events: none;
+            display: none;
+            z-index: 1000;
+            max-width: 250px;
+            line-height: 1.5;
+        }
+        
+        #tooltip .tooltip-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #FFD700;
+        }
+        
+        #tooltip .tooltip-item {
+            margin: 3px 0;
+        }
+        
+        .tracked-bee {
+            box-shadow: 0 0 15px 3px rgba(255, 215, 0, 0.8);
+        }
+        
+        .tips {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin-top: 15px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .tips-title {
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        
+        .tips-list {
+            font-size: 13px;
+            color: #555;
+            line-height: 1.8;
+        }
+        
+        .tips-list li {
+            margin-left: 20px;
+            margin-bottom: 4px;
+        }
+        
+        .tip-icon {
+            color: #667eea;
+            margin-right: 5px;
+        }
     </style>
 </head>
 <body>
@@ -189,6 +248,8 @@
     <div id="canvasContainer">
         <canvas id="beehiveCanvas" width="800" height="600"></canvas>
     </div>
+    
+    <div id="tooltip"></div>
     
     <div id="controls">
         <div class="control-group">
@@ -212,9 +273,17 @@
             </div>
         </div>
         
+        <div class="control-group">
+            <label for="simulationSpeed">Simulation Speed: <span id="speedValue">1.0</span>x</label>
+            <div class="slider-container">
+                <input type="range" id="simulationSpeed" min="0.25" max="4" value="1" step="0.25">
+            </div>
+        </div>
+        
         <div class="button-group">
             <button id="resetBtn">Reset Simulation</button>
             <button id="pauseBtn">Pause</button>
+            <button id="clearTrackingBtn">Clear Tracking</button>
         </div>
         
         <div class="legend">
@@ -254,6 +323,16 @@
                 <div class="stat-value" id="activeBees">0</div>
             </div>
         </div>
+        
+        <div class="tips">
+            <div class="tips-title">💡 Interactive Tips</div>
+            <ul class="tips-list">
+                <li><span class="tip-icon">🖱️</span><strong>Click on a bee</strong> to track its journey with visual indicators</li>
+                <li><span class="tip-icon">👆</span><strong>Hover over bees or cells</strong> to see detailed information</li>
+                <li><span class="tip-icon">⚡</span><strong>Adjust speed</strong> to watch in slow motion or fast forward</li>
+                <li><span class="tip-icon">📏</span><strong>Change hive size live</strong> without interrupting the simulation</li>
+            </ul>
+        </div>
     </div>
     
     <script>
@@ -268,6 +347,7 @@
             colonySize: 10,
             resourceAvailability: 50,
             maxRings: 8,
+            simulationSpeed: 1.0,
             isPaused: false
         };
         
@@ -276,6 +356,19 @@
         
         // Bees
         const bees = [];
+        
+        // Tracking
+        let trackedBee = null;
+        
+        // Tooltip
+        const tooltip = document.getElementById('tooltip');
+        
+        // Stats history for graphs
+        const statsHistory = {
+            totalCells: [],
+            honeyCells: [],
+            maxHistory: 60  // Keep last 60 data points
+        };
         
         // Cell types
         const CELL_TYPES = {
@@ -389,8 +482,10 @@
             }
         }
         
-        // Update bees
+        // Update bees (with speed control)
         function updateBees() {
+            const speedMultiplier = config.simulationSpeed;
+            
             bees.forEach(bee => {
                 if (!bee.targetCell || Math.random() < 0.01) {
                     // Select new target
@@ -428,8 +523,8 @@
                     const distance = Math.sqrt(dx * dx + dy * dy);
                     
                     if (distance > 5) {
-                        bee.x += (dx / distance) * bee.speed;
-                        bee.y += (dy / distance) * bee.speed;
+                        bee.x += (dx / distance) * bee.speed * speedMultiplier;
+                        bee.y += (dy / distance) * bee.speed * speedMultiplier;
                         bee.angle = Math.atan2(dy, dx);
                     } else {
                         // Reached target
@@ -454,10 +549,12 @@
             });
         }
         
-        // Update cells
+        // Update cells (with speed control)
         function updateCells() {
+            const speedMultiplier = config.simulationSpeed;
+            
             cells.forEach(cell => {
-                cell.age++;
+                cell.age += speedMultiplier;
                 
                 // Gradually build cells from center outward
                 if (cell.buildProgress < 1) {
@@ -495,7 +592,7 @@
                 
                 // Update transition progress
                 if (cell.transitionProgress < 1) {
-                    cell.transitionProgress = Math.min(1, cell.transitionProgress + 0.01);
+                    cell.transitionProgress = Math.min(1, cell.transitionProgress + 0.01 * speedMultiplier);
                 }
             });
         }
@@ -514,6 +611,26 @@
         function drawBee(bee) {
             ctx.save();
             ctx.translate(bee.x, bee.y);
+            
+            // Highlight tracked bee
+            if (bee === trackedBee) {
+                ctx.beginPath();
+                ctx.arc(0, 0, 12, 0, Math.PI * 2);
+                ctx.strokeStyle = '#FFD700';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                
+                // Draw tracking line from bee to target
+                if (bee.targetCell) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, 0);
+                    ctx.lineTo(bee.targetCell.x - bee.x, bee.targetCell.y - bee.y);
+                    ctx.strokeStyle = 'rgba(255, 215, 0, 0.3)';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                }
+            }
+            
             ctx.rotate(bee.angle);
             
             // Body
@@ -618,6 +735,63 @@
             document.getElementById('honeyCells').textContent = honeyFilled;
             document.getElementById('hiveSize').textContent = `${maxRing} rings`;
             document.getElementById('activeBees').textContent = config.colonySize;
+            
+            // Update stats history for graphing
+            statsHistory.totalCells.push(totalBuilt);
+            statsHistory.honeyCells.push(honeyFilled);
+            
+            // Keep only recent history
+            if (statsHistory.totalCells.length > statsHistory.maxHistory) {
+                statsHistory.totalCells.shift();
+                statsHistory.honeyCells.shift();
+            }
+        }
+        
+        // Show tooltip
+        function showTooltip(x, y, content) {
+            tooltip.innerHTML = content;
+            tooltip.style.display = 'block';
+            tooltip.style.left = (x + 15) + 'px';
+            tooltip.style.top = (y + 15) + 'px';
+        }
+        
+        // Hide tooltip
+        function hideTooltip() {
+            tooltip.style.display = 'none';
+        }
+        
+        // Get cell at position
+        function getCellAtPosition(x, y) {
+            const rect = canvas.getBoundingClientRect();
+            const canvasX = x - rect.left;
+            const canvasY = y - rect.top;
+            
+            for (let cell of cells) {
+                const dx = canvasX - cell.x;
+                const dy = canvasY - cell.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance < config.hexSize) {
+                    return cell;
+                }
+            }
+            return null;
+        }
+        
+        // Get bee at position
+        function getBeeAtPosition(x, y) {
+            const rect = canvas.getBoundingClientRect();
+            const canvasX = x - rect.left;
+            const canvasY = y - rect.top;
+            
+            for (let bee of bees) {
+                const dx = canvasX - bee.x;
+                const dy = canvasY - bee.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance < 10) {
+                    return bee;
+                }
+            }
+            return null;
         }
         
         // Animation loop
@@ -723,6 +897,57 @@
         document.getElementById('pauseBtn').addEventListener('click', (e) => {
             config.isPaused = !config.isPaused;
             e.target.textContent = config.isPaused ? 'Resume' : 'Pause';
+        });
+        
+        document.getElementById('simulationSpeed').addEventListener('input', (e) => {
+            config.simulationSpeed = parseFloat(e.target.value);
+            document.getElementById('speedValue').textContent = config.simulationSpeed.toFixed(2);
+        });
+        
+        document.getElementById('clearTrackingBtn').addEventListener('click', () => {
+            trackedBee = null;
+        });
+        
+        // Mouse move for tooltips
+        canvas.addEventListener('mousemove', (e) => {
+            const cell = getCellAtPosition(e.clientX, e.clientY);
+            const bee = getBeeAtPosition(e.clientX, e.clientY);
+            
+            if (bee) {
+                const content = `
+                    <div class="tooltip-title">🐝 Worker Bee</div>
+                    <div class="tooltip-item">State: ${bee.state}</div>
+                    <div class="tooltip-item">Carrying: ${bee.carrying ? 'Nectar/Pollen' : 'Empty'}</div>
+                    <div class="tooltip-item">Speed: ${bee.speed.toFixed(2)}</div>
+                    <div class="tooltip-item">Position: (${Math.round(bee.x)}, ${Math.round(bee.y)})</div>
+                    <div class="tooltip-item" style="margin-top: 5px; font-style: italic;">Click to track</div>
+                `;
+                showTooltip(e.clientX, e.clientY, content);
+            } else if (cell && cell.buildProgress > 0) {
+                const content = `
+                    <div class="tooltip-title">🔷 Hexagonal Cell</div>
+                    <div class="tooltip-item">Type: ${cell.type}</div>
+                    <div class="tooltip-item">Build Progress: ${(cell.buildProgress * 100).toFixed(0)}%</div>
+                    <div class="tooltip-item">Honey Level: ${(cell.honeyLevel * 100).toFixed(0)}%</div>
+                    <div class="tooltip-item">Age: ${Math.round(cell.age)} frames</div>
+                    <div class="tooltip-item">Coordinates: (${cell.q}, ${cell.r})</div>
+                `;
+                showTooltip(e.clientX, e.clientY, content);
+            } else {
+                hideTooltip();
+            }
+        });
+        
+        canvas.addEventListener('mouseleave', () => {
+            hideTooltip();
+        });
+        
+        // Click to track bee
+        canvas.addEventListener('click', (e) => {
+            const bee = getBeeAtPosition(e.clientX, e.clientY);
+            if (bee) {
+                trackedBee = bee;
+            }
         });
         
         // Initialize and start

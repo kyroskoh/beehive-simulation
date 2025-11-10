@@ -38,9 +38,13 @@ An interactive, real-time simulation of honeybee colony behavior and honeycomb c
 ### 🎮 Interactive Controls
 - **Colony Size Slider**: Adjust the number of active bees (5-50 bees)
 - **Resource Availability**: Control the rate of resource gathering (10-100%)
-- **Hive Size Slider**: Set the maximum hive size (3-15 rings)
+- **Hive Size Slider**: Set the maximum hive size (3-15 rings) with live resizing
+- **Simulation Speed**: Control time flow (0.25x to 4x speed)
+- **Individual Bee Tracking**: Click on any bee to follow its journey with visual tracking
+- **Interactive Tooltips**: Hover over bees and cells to see detailed information
 - **Pause/Resume**: Freeze the simulation at any moment
 - **Reset Button**: Start fresh with a new hive
+- **Clear Tracking**: Stop following the currently tracked bee
 
 ### 📊 Real-Time Statistics
 - **Total Cells**: Count of fully constructed hexagonal cells
@@ -49,11 +53,14 @@ An interactive, real-time simulation of honeybee colony behavior and honeycomb c
 - **Active Bees**: Current bee population in the colony
 
 ### 🎨 Beautiful UI
-- Modern gradient background
-- Smooth animations and transitions
+- Modern gradient background with purple gradients
+- Smooth animations and transitions for all cell type changes
 - Responsive design
 - Color-coded legend for cell types
-- Professional stat displays
+- Professional stat displays with 4 key metrics
+- Real-time interactive tooltips with detailed information
+- Visual tracking indicators (golden rings and lines)
+- Dynamic speed control feedback
 
 ## 🚀 Getting Started
 
@@ -114,9 +121,21 @@ The deployment happens automatically on every push to the main branch, or you ca
    - Smaller hives (3-5 rings): Quick completion, compact colonies
    - Medium hives (6-10 rings): Balanced simulation
    - Large hives (11-15 rings): Expansive colonies, longer build times
-5. **Monitor Progress**: Keep track of statistics in the bottom panel
-6. **Pause/Resume**: Click the pause button to study the hive structure at any moment
-7. **Reset**: Start over with a fresh hive to observe different growth patterns
+5. **Control Speed**: Adjust simulation speed for different viewing experiences:
+   - Slow motion (0.25x-0.75x): Study bee behaviors in detail
+   - Normal speed (1.0x): Real-time simulation
+   - Fast forward (1.25x-4x): Watch colony expansion rapidly
+6. **Track Individual Bees**: Click on any bee to follow its journey
+   - Golden ring appears around the tracked bee
+   - Lines show the bee's current target destination
+   - Click "Clear Tracking" to stop following
+7. **Explore with Tooltips**: Hover over bees and cells to see:
+   - Bee information: state, carrying status, speed, position
+   - Cell information: type, build progress, honey level, age, coordinates
+8. **Monitor Progress**: Keep track of statistics in the bottom panel:
+   - Total Cells, Honey Cells, Hive Size (rings), Active Bees
+9. **Pause/Resume**: Click the pause button to study the hive structure at any moment
+10. **Reset**: Start over with a fresh hive to observe different growth patterns
 
 ## 🧬 Technical Details
 
@@ -125,6 +144,8 @@ The deployment happens automatically on every push to the main branch, or you ca
 - **HTML5 Canvas**: All rendering done with native Canvas API
 - **Hexagonal Coordinates**: Uses axial coordinate system (q, r) for hex grid
 - **Animation Loop**: Powered by `requestAnimationFrame` for smooth 60 FPS performance
+- **Event-Driven Interactions**: Real-time mouse tracking, click handlers, and hover detection
+- **Performance Optimized**: Efficient collision detection and rendering for large colonies
 
 ### Key Algorithms
 
@@ -164,7 +185,8 @@ const config = {
     centerY: canvas.height / 2,
     colonySize: 10,           // Starting number of bees
     resourceAvailability: 50, // Starting resource level
-    maxRings: 8               // Maximum hive size (number of rings)
+    maxRings: 8,              // Maximum hive size (number of rings)
+    simulationSpeed: 1.0      // Simulation time multiplier (0.25x to 4x)
 };
 ```
 
@@ -184,11 +206,29 @@ This simulation demonstrates:
 - **Agent-Based Modeling**: Independent entities creating complex systems
 - **Hexagonal Grids**: Mathematical concepts in coordinate systems
 
+## ✨ New Features (Recently Added)
+
+### Interactive Enhancements
+- **🎮 Speed Control**: Adjust simulation speed from 0.25x (slow motion) to 4x (fast forward)
+- **🔍 Individual Bee Tracking**: Click any bee to follow it with visual indicators
+- **💬 Information Tooltips**: Hover over bees and cells for detailed real-time data
+- **🎨 Smooth Transitions**: All cell type changes now fade smoothly between colors
+- **📏 Live Hive Resizing**: Adjust hive size without interrupting the simulation
+- **📊 Statistics Tracking**: Monitor colony metrics in real-time
+
+### User Experience Improvements  
+- Visual tracking with golden rings and target lines
+- Detailed tooltips showing bee states, cell properties, and coordinates
+- Non-disruptive hive expansion/contraction
+- Speed-adjusted animations for all behaviors
+- Clear tracking button to release followed bees
+
 ## 🐛 Known Behaviors
 
 - Bees may occasionally cluster in certain areas (realistic bee behavior!)
 - At very low resource levels (<15%), construction can be extremely slow
 - With 50 bees and high resources, the hive expands rapidly
+- At 4x speed, animations may appear choppy but simulation remains accurate
 
 ## 🛠️ Future Enhancements
 
@@ -226,12 +266,12 @@ Potential features for future versions:
 - [ ] **Hive defense mechanisms** (guard bees, alarm pheromones)
 
 ### 🎮 User Interaction
+- [x] **Individual bee tracking** - follow a specific bee's journey ✅
+- [x] **Speed control** (slow motion, fast forward, real-time) ✅
 - [ ] **Multiple hive competition** - side-by-side colonies
 - [ ] **Click to place flowers** - interactive resource management
 - [ ] **Beekeeper interventions** (adding supers, harvesting honey)
 - [ ] **Camera controls** (zoom, pan for large hives)
-- [ ] **Individual bee tracking** - follow a specific bee's journey
-- [ ] **Speed control** (slow motion, fast forward, real-time)
 
 ### 📊 Data & Visualization
 - [ ] **Statistics graphs** (population over time, honey production rates)
@@ -258,8 +298,8 @@ Potential features for future versions:
 - [ ] **Multiplayer mode** - collaborative or competitive hive building
 
 ### 📚 Educational Features
+- [x] **Information tooltips** on hover (cell details, bee states) ✅
 - [ ] **Tutorial mode** explaining bee biology and behavior
-- [ ] **Information tooltips** on hover (cell details, bee states)
 - [ ] **Comparison mode** - test different parameters side-by-side
 - [ ] **Research challenges** - scientific questions to explore
 - [ ] **Real-world data integration** (actual bee colony statistics)
