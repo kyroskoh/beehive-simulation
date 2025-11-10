@@ -19,10 +19,15 @@ An interactive, real-time simulation of honeybee colony behavior and honeycomb c
 - **Neighbor-Dependent Expansion**: New cells build faster when adjacent cells are complete
 
 ### 🐝 Realistic Bee Behavior
+- **Worker Bee Specialization**: Three distinct bee types with unique behaviors:
+  - **Foragers** (40%): Fast-moving bees focused on collecting nectar and pollen
+  - **Builders** (35%): Specialized in constructing new cells efficiently
+  - **Nurses** (25%): Care for brood cells and tend to larvae
+- **Type-Specific Efficiency**: Each bee type has optimized performance in their specialty
 - **Autonomous Agents**: Each bee operates independently with its own decision-making
-- **Task Switching**: Bees alternate between building, foraging, and honey storage
+- **Task Switching**: Bees adapt their tasks based on colony needs
 - **Pathfinding**: Smooth movement and navigation to target cells
-- **Visual States**: Bees change color based on whether they're carrying resources (golden) or empty (orange)
+- **Visual Identification**: Bees colored by type (golden/orange foragers, dark orange builders, green nurses)
 - **Wing Animation**: Realistic flapping wing animation
 
 ### 🍯 Honey Storage System
@@ -51,6 +56,10 @@ An interactive, real-time simulation of honeybee colony behavior and honeycomb c
 - **Honey Cells**: Number of cells containing stored honey
 - **Hive Size**: Current radius of the hive in rings
 - **Active Bees**: Current bee population in the colony
+- **Growth Trends Chart**: Live mini-graph showing colony growth over time
+  - Purple line: Total cells built
+  - Gold line: Honey cells filled
+  - Updates every 5 frames for smooth visualization
 
 ### 🎨 Beautiful UI
 - Modern gradient background with purple gradients
@@ -130,12 +139,20 @@ The deployment happens automatically on every push to the main branch, or you ca
    - Lines show the bee's current target destination
    - Click "Clear Tracking" to stop following
 7. **Explore with Tooltips**: Hover over bees and cells to see:
-   - Bee information: state, carrying status, speed, position
+   - Bee information: type (Forager/Builder/Nurse), state, carrying status, speed, efficiency, position
    - Cell information: type, build progress, honey level, age, coordinates
-8. **Monitor Progress**: Keep track of statistics in the bottom panel:
+8. **Observe Bee Specialization**: Watch how different bee types work:
+   - **Foragers** (golden/orange): Fast movers collecting resources
+   - **Builders** (dark orange): Focused on cell construction
+   - **Nurses** (green): Tending to brood cells
+9. **Monitor Growth Trends**: Check the mini-chart showing:
+   - Colony expansion (purple line)
+   - Honey production (gold line)
+10. **Monitor Progress**: Keep track of statistics in the bottom panel:
    - Total Cells, Honey Cells, Hive Size (rings), Active Bees
-9. **Pause/Resume**: Click the pause button to study the hive structure at any moment
-10. **Reset**: Start over with a fresh hive to observe different growth patterns
+   - Growth Trends chart showing historical data
+11. **Pause/Resume**: Click the pause button to study the hive structure at any moment
+12. **Reset**: Start over with a fresh hive to observe different growth patterns
 
 ## 🧬 Technical Details
 
@@ -215,6 +232,8 @@ This simulation demonstrates:
 - **🎨 Smooth Transitions**: All cell type changes now fade smoothly between colors
 - **📏 Live Hive Resizing**: Adjust hive size without interrupting the simulation
 - **📊 Statistics Tracking**: Monitor colony metrics in real-time
+- **📈 Growth Trends Chart**: Live mini-graph showing colony expansion and honey production
+- **🐝 Worker Specialization**: Three bee types (Foragers, Builders, Nurses) with unique behaviors and colors
 
 ### User Experience Improvements  
 - Visual tracking with golden rings and target lines
@@ -235,8 +254,8 @@ This simulation demonstrates:
 Potential features for future versions:
 
 ### 🐝 Advanced Bee Behaviors
+- [x] **Worker bee specialization** (foragers, nurses, builders) ✅
 - [ ] **Queen bee** with special behaviors (laying eggs, royal jelly production)
-- [ ] **Worker bee specialization** (foragers, nurses, builders, guards)
 - [ ] **Bee lifecycle** (eggs → larvae → pupae → adult bees)
 - [ ] **Waggle dance communication** - bees sharing resource locations
 - [ ] **Scout bees** - exploring for new hive locations when overcrowded
@@ -274,7 +293,7 @@ Potential features for future versions:
 - [ ] **Camera controls** (zoom, pan for large hives)
 
 ### 📊 Data & Visualization
-- [ ] **Statistics graphs** (population over time, honey production rates)
+- [x] **Statistics graphs** (population over time, honey production rates) ✅
 - [ ] **Heat maps** (activity levels, resource density, temperature)
 - [ ] **Pollen collection visualization** with different flower colors
 - [ ] **Export simulation data** (CSV, JSON for analysis)

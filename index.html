@@ -239,6 +239,85 @@
             color: #667eea;
             margin-right: 5px;
         }
+        
+        .chart-container {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 2px solid #eee;
+        }
+        
+        .chart-title {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+        
+        .mini-chart {
+            height: 80px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 10px;
+            position: relative;
+            margin-bottom: 15px;
+        }
+        
+        .chart-line {
+            stroke-width: 2;
+            fill: none;
+        }
+        
+        .chart-line-total {
+            stroke: #667eea;
+        }
+        
+        .chart-line-honey {
+            stroke: #FFD700;
+        }
+        
+        .chart-legend {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+        
+        .chart-legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .chart-legend-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+        }
+        
+        .bee-type-badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: bold;
+            margin-left: 5px;
+        }
+        
+        .bee-forager {
+            background: #FFD700;
+            color: #333;
+        }
+        
+        .bee-builder {
+            background: #FFA500;
+            color: #333;
+        }
+        
+        .bee-nurse {
+            background: #90EE90;
+            color: #333;
+        }
     </style>
 </head>
 <body>
@@ -305,6 +384,21 @@
             </div>
         </div>
         
+        <div class="legend" style="margin-top: 10px;">
+            <div class="legend-item">
+                <div class="legend-color" style="background: #FFD700; border: 1px solid #333;"></div>
+                <span>Forager</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #FF8C00; border: 1px solid #333;"></div>
+                <span>Builder</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #90EE90; border: 1px solid #333;"></div>
+                <span>Nurse</span>
+            </div>
+        </div>
+        
         <div class="stats">
             <div class="stat-item">
                 <div class="stat-label">Total Cells</div>
@@ -333,6 +427,23 @@
                 <li><span class="tip-icon">📏</span><strong>Change hive size live</strong> without interrupting the simulation</li>
             </ul>
         </div>
+        
+        <div class="chart-container">
+            <div class="chart-title">📈 Growth Trends</div>
+            <div class="mini-chart">
+                <svg id="growthChart" width="100%" height="100%" style="display: block;"></svg>
+            </div>
+            <div class="chart-legend">
+                <div class="chart-legend-item">
+                    <div class="chart-legend-color" style="background: #667eea;"></div>
+                    <span>Total Cells</span>
+                </div>
+                <div class="chart-legend-item">
+                    <div class="chart-legend-color" style="background: #FFD700;"></div>
+                    <span>Honey Cells</span>
+                </div>
+            </div>
+        </div>
     </div>
     
     <script>
@@ -357,6 +468,13 @@
         // Bees
         const bees = [];
         
+        // Bee types
+        const BEE_TYPES = {
+            FORAGER: 'forager',
+            BUILDER: 'builder',
+            NURSE: 'nurse'
+        };
+        
         // Tracking
         let trackedBee = null;
         
@@ -369,6 +487,9 @@
             honeyCells: [],
             maxHistory: 60  // Keep last 60 data points
         };
+        
+        // Chart update counter
+        let chartUpdateCounter = 0;
         
         // Cell types
         const CELL_TYPES = {
@@ -466,18 +587,31 @@
             ctx.stroke();
         }
         
-        // Initialize bees
+        // Initialize bees with specialization
         function initializeBees() {
             bees.length = 0;
             for (let i = 0; i < config.colonySize; i++) {
+                // Assign bee type based on colony needs
+                let beeType;
+                const rand = Math.random();
+                if (rand < 0.4) {
+                    beeType = BEE_TYPES.FORAGER; // 40% foragers
+                } else if (rand < 0.75) {
+                    beeType = BEE_TYPES.BUILDER; // 35% builders
+                } else {
+                    beeType = BEE_TYPES.NURSE; // 25% nurses
+                }
+                
                 bees.push({
                     x: config.centerX + (Math.random() - 0.5) * 100,
                     y: config.centerY + (Math.random() - 0.5) * 100,
                     targetCell: null,
-                    speed: 2 + Math.random() * 2,
-                    carrying: Math.random() > 0.5,
+                    speed: beeType === BEE_TYPES.FORAGER ? 3 + Math.random() * 2 : 2 + Math.random() * 2,
+                    carrying: false,
                     angle: Math.random() * Math.PI * 2,
-                    state: 'exploring' // exploring, building, storing
+                    state: 'exploring',
+                    type: beeType,
+                    efficiency: beeType === BEE_TYPES.FORAGER ? 1.2 : beeType === BEE_TYPES.BUILDER ? 1.1 : 1.0
                 });
             }
         }
@@ -491,27 +625,65 @@
                     // Select new target
                     const builtCells = cells.filter(c => c.buildProgress > 0);
                     if (builtCells.length > 0) {
-                        // Prioritize cells based on bee state
-                        if (bee.carrying) {
-                            // Find cells to store honey
-                            const emptyCells = builtCells.filter(c => 
-                                c.buildProgress === 1 && 
-                                c.honeyLevel < 1 && 
-                                c.type !== CELL_TYPES.BROOD
-                            );
-                            bee.targetCell = emptyCells[Math.floor(Math.random() * emptyCells.length)] || 
-                                           builtCells[Math.floor(Math.random() * builtCells.length)];
-                            bee.state = 'storing';
-                        } else {
-                            // Find cells to build
+                        // Prioritize cells based on bee type and state
+                        if (bee.type === BEE_TYPES.FORAGER) {
+                            // Foragers focus on collecting resources
+                            if (bee.carrying) {
+                                // Store honey
+                                const emptyCells = builtCells.filter(c => 
+                                    c.buildProgress === 1 && 
+                                    c.honeyLevel < 1 && 
+                                    c.type !== CELL_TYPES.BROOD
+                                );
+                                bee.targetCell = emptyCells[Math.floor(Math.random() * emptyCells.length)] || 
+                                               builtCells[Math.floor(Math.random() * builtCells.length)];
+                                bee.state = 'storing';
+                            } else {
+                                // Go out to collect (simulated by finding empty cells)
+                                const emptyCells = builtCells.filter(c => 
+                                    c.buildProgress === 1 && 
+                                    c.honeyLevel < 0.5
+                                );
+                                bee.targetCell = emptyCells[Math.floor(Math.random() * emptyCells.length)] || 
+                                               builtCells[Math.floor(Math.random() * builtCells.length)];
+                                bee.state = 'foraging';
+                            }
+                        } else if (bee.type === BEE_TYPES.BUILDER) {
+                            // Builders focus on construction
                             const unbuildCells = cells.filter(c => 
                                 c.buildProgress > 0 && 
                                 c.buildProgress < 1
                             );
-                            bee.targetCell = unbuildCells.length > 0 ? 
-                                           unbuildCells[Math.floor(Math.random() * unbuildCells.length)] :
-                                           builtCells[Math.floor(Math.random() * builtCells.length)];
-                            bee.state = 'building';
+                            if (unbuildCells.length > 0) {
+                                bee.targetCell = unbuildCells[Math.floor(Math.random() * unbuildCells.length)];
+                                bee.state = 'building';
+                            } else {
+                                // Help with storage if no building needed
+                                const emptyCells = builtCells.filter(c => 
+                                    c.buildProgress === 1 && 
+                                    c.honeyLevel < 1 && 
+                                    c.type !== CELL_TYPES.BROOD
+                                );
+                                bee.targetCell = emptyCells[Math.floor(Math.random() * emptyCells.length)] || 
+                                               builtCells[Math.floor(Math.random() * builtCells.length)];
+                                bee.state = 'storing';
+                            }
+                        } else if (bee.type === BEE_TYPES.NURSE) {
+                            // Nurses focus on brood cells
+                            const broodCells = builtCells.filter(c => c.type === CELL_TYPES.BROOD);
+                            if (broodCells.length > 0) {
+                                bee.targetCell = broodCells[Math.floor(Math.random() * broodCells.length)];
+                                bee.state = 'nursing';
+                            } else {
+                                // Help with storage if no brood
+                                const emptyCells = builtCells.filter(c => 
+                                    c.buildProgress === 1 && 
+                                    c.honeyLevel < 1
+                                );
+                                bee.targetCell = emptyCells[Math.floor(Math.random() * emptyCells.length)] || 
+                                               builtCells[Math.floor(Math.random() * builtCells.length)];
+                                bee.state = 'storing';
+                            }
                         }
                     }
                 }
@@ -527,18 +699,30 @@
                         bee.y += (dy / distance) * bee.speed * speedMultiplier;
                         bee.angle = Math.atan2(dy, dx);
                     } else {
-                        // Reached target
+                        // Reached target - behavior based on bee type
                         if (bee.state === 'storing' && bee.carrying) {
-                            bee.targetCell.honeyLevel = Math.min(1, bee.targetCell.honeyLevel + 0.02);
+                            const amount = 0.02 * bee.efficiency;
+                            bee.targetCell.honeyLevel = Math.min(1, bee.targetCell.honeyLevel + amount);
                             if (bee.targetCell.honeyLevel > 0.3 && bee.targetCell.type !== CELL_TYPES.HONEY) {
                                 bee.targetCell.previousType = bee.targetCell.type;
                                 bee.targetCell.type = CELL_TYPES.HONEY;
                                 bee.targetCell.transitionProgress = 0;
                             }
                             bee.carrying = false;
+                            bee.targetCell = null;
                         } else if (bee.state === 'building') {
-                            // Leave and collect resources
-                            bee.carrying = Math.random() < (config.resourceAvailability / 100);
+                            // Builders contribute to construction
+                            const buildAmount = 0.005 * bee.efficiency * speedMultiplier;
+                            bee.targetCell.buildProgress = Math.min(1, bee.targetCell.buildProgress + buildAmount);
+                            if (bee.targetCell.buildProgress >= 1) {
+                                bee.targetCell = null;
+                            }
+                        } else if (bee.state === 'foraging') {
+                            // Foragers collect resources
+                            bee.carrying = Math.random() < (config.resourceAvailability / 100) * bee.efficiency;
+                            bee.targetCell = null;
+                        } else if (bee.state === 'nursing') {
+                            // Nurses tend to brood cells
                             bee.targetCell = null;
                         }
                     }
@@ -633,8 +817,19 @@
             
             ctx.rotate(bee.angle);
             
-            // Body
-            ctx.fillStyle = bee.carrying ? '#FFD700' : '#FFA500';
+            // Body - color based on bee type
+            let bodyColor;
+            if (bee.type === BEE_TYPES.FORAGER) {
+                bodyColor = bee.carrying ? '#FFD700' : '#FFA500'; // Golden when carrying, orange when empty
+            } else if (bee.type === BEE_TYPES.BUILDER) {
+                bodyColor = '#FF8C00'; // Dark orange
+            } else if (bee.type === BEE_TYPES.NURSE) {
+                bodyColor = '#90EE90'; // Light green
+            } else {
+                bodyColor = bee.carrying ? '#FFD700' : '#FFA500';
+            }
+            
+            ctx.fillStyle = bodyColor;
             ctx.beginPath();
             ctx.ellipse(0, 0, 6, 4, 0, 0, Math.PI * 2);
             ctx.fill();
@@ -745,6 +940,73 @@
                 statsHistory.totalCells.shift();
                 statsHistory.honeyCells.shift();
             }
+            
+            // Update chart periodically
+            chartUpdateCounter++;
+            if (chartUpdateCounter >= 5) { // Update chart every 5 frames
+                updateChart();
+                chartUpdateCounter = 0;
+            }
+        }
+        
+        // Update growth chart
+        function updateChart() {
+            const chart = document.getElementById('growthChart');
+            const container = chart.parentElement;
+            const width = container.clientWidth - 20;
+            const height = container.clientHeight - 20;
+            
+            chart.setAttribute('width', width);
+            chart.setAttribute('height', height);
+            chart.setAttribute('viewBox', `0 0 ${width} ${height}`);
+            
+            // Clear previous content
+            chart.innerHTML = '';
+            
+            if (statsHistory.totalCells.length < 2) return;
+            
+            const dataLength = statsHistory.totalCells.length;
+            const maxValue = Math.max(
+                Math.max(...statsHistory.totalCells),
+                Math.max(...statsHistory.honeyCells)
+            ) || 1;
+            
+            // Draw grid lines
+            for (let i = 0; i <= 4; i++) {
+                const y = (height / 4) * i;
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', '0');
+                line.setAttribute('y1', y);
+                line.setAttribute('x2', width);
+                line.setAttribute('y2', y);
+                line.setAttribute('stroke', '#e0e0e0');
+                line.setAttribute('stroke-width', '1');
+                chart.appendChild(line);
+            }
+            
+            // Draw total cells line
+            const totalPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            let pathData = '';
+            statsHistory.totalCells.forEach((value, index) => {
+                const x = (width / (dataLength - 1)) * index;
+                const y = height - (value / maxValue) * height;
+                pathData += (index === 0 ? 'M' : 'L') + ` ${x} ${y}`;
+            });
+            totalPath.setAttribute('d', pathData);
+            totalPath.setAttribute('class', 'chart-line chart-line-total');
+            chart.appendChild(totalPath);
+            
+            // Draw honey cells line
+            const honeyPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            pathData = '';
+            statsHistory.honeyCells.forEach((value, index) => {
+                const x = (width / (dataLength - 1)) * index;
+                const y = height - (value / maxValue) * height;
+                pathData += (index === 0 ? 'M' : 'L') + ` ${x} ${y}`;
+            });
+            honeyPath.setAttribute('d', pathData);
+            honeyPath.setAttribute('class', 'chart-line chart-line-honey');
+            chart.appendChild(honeyPath);
         }
         
         // Show tooltip
@@ -823,16 +1085,28 @@
             config.colonySize = parseInt(e.target.value);
             document.getElementById('colonySizeValue').textContent = config.colonySize;
             
-            // Adjust bee count
+            // Adjust bee count with proper specialization
             while (bees.length < config.colonySize) {
+                const rand = Math.random();
+                let beeType;
+                if (rand < 0.4) {
+                    beeType = BEE_TYPES.FORAGER;
+                } else if (rand < 0.75) {
+                    beeType = BEE_TYPES.BUILDER;
+                } else {
+                    beeType = BEE_TYPES.NURSE;
+                }
+                
                 bees.push({
                     x: config.centerX + (Math.random() - 0.5) * 100,
                     y: config.centerY + (Math.random() - 0.5) * 100,
                     targetCell: null,
-                    speed: 2 + Math.random() * 2,
-                    carrying: Math.random() > 0.5,
+                    speed: beeType === BEE_TYPES.FORAGER ? 3 + Math.random() * 2 : 2 + Math.random() * 2,
+                    carrying: false,
                     angle: Math.random() * Math.PI * 2,
-                    state: 'exploring'
+                    state: 'exploring',
+                    type: beeType,
+                    efficiency: beeType === BEE_TYPES.FORAGER ? 1.2 : beeType === BEE_TYPES.BUILDER ? 1.1 : 1.0
                 });
             }
             while (bees.length > config.colonySize) {
@@ -914,11 +1188,25 @@
             const bee = getBeeAtPosition(e.clientX, e.clientY);
             
             if (bee) {
+                const typeNames = {
+                    [BEE_TYPES.FORAGER]: 'Forager',
+                    [BEE_TYPES.BUILDER]: 'Builder',
+                    [BEE_TYPES.NURSE]: 'Nurse'
+                };
+                const typeColors = {
+                    [BEE_TYPES.FORAGER]: 'bee-forager',
+                    [BEE_TYPES.BUILDER]: 'bee-builder',
+                    [BEE_TYPES.NURSE]: 'bee-nurse'
+                };
+                
                 const content = `
-                    <div class="tooltip-title">🐝 Worker Bee</div>
+                    <div class="tooltip-title">🐝 Worker Bee 
+                        <span class="bee-type-badge ${typeColors[bee.type]}">${typeNames[bee.type]}</span>
+                    </div>
                     <div class="tooltip-item">State: ${bee.state}</div>
                     <div class="tooltip-item">Carrying: ${bee.carrying ? 'Nectar/Pollen' : 'Empty'}</div>
                     <div class="tooltip-item">Speed: ${bee.speed.toFixed(2)}</div>
+                    <div class="tooltip-item">Efficiency: ${(bee.efficiency * 100).toFixed(0)}%</div>
                     <div class="tooltip-item">Position: (${Math.round(bee.x)}, ${Math.round(bee.y)})</div>
                     <div class="tooltip-item" style="margin-top: 5px; font-style: italic;">Click to track</div>
                 `;
@@ -953,6 +1241,7 @@
         // Initialize and start
         initializeGrid();
         initializeBees();
+        updateChart(); // Initialize chart
         animate();
     </script>
 </body>
