@@ -135,9 +135,11 @@ The deployment happens automatically on every push to the main branch, or you ca
    - Normal speed (1.0x): Real-time simulation
    - Fast forward (1.25x-4x): Watch colony expansion rapidly
 6. **Track Individual Bees**: Click on any bee to follow its journey
-   - Golden ring appears around the tracked bee
+   - Golden ring appears around the tracked bee (works even when paused!)
    - Lines show the bee's current target destination
-   - Click "Clear Tracking" to stop following
+   - Click another bee to switch tracking, or click empty space to clear
+   - Click "Clear Tracking" button to stop following
+   - Perfect for studying bee behavior when simulation is paused
 7. **Explore with Tooltips**: Hover over bees and cells to see:
    - Bee information: type (Forager/Builder/Nurse), state, carrying status, speed, efficiency, position
    - Cell information: type, build progress, honey level, age, coordinates

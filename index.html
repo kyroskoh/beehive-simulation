@@ -421,10 +421,11 @@
         <div class="tips">
             <div class="tips-title">💡 Interactive Tips</div>
             <ul class="tips-list">
-                <li><span class="tip-icon">🖱️</span><strong>Click on a bee</strong> to track its journey with visual indicators</li>
+                <li><span class="tip-icon">🖱️</span><strong>Click on a bee</strong> to track it (works when paused too!)</li>
                 <li><span class="tip-icon">👆</span><strong>Hover over bees or cells</strong> to see detailed information</li>
                 <li><span class="tip-icon">⚡</span><strong>Adjust speed</strong> to watch in slow motion or fast forward</li>
                 <li><span class="tip-icon">📏</span><strong>Change hive size live</strong> without interrupting the simulation</li>
+                <li><span class="tip-icon">🔄</span><strong>Click another bee</strong> to switch tracking, or click empty space to clear</li>
             </ul>
         </div>
         
@@ -796,22 +797,39 @@
             ctx.save();
             ctx.translate(bee.x, bee.y);
             
-            // Highlight tracked bee
+            // Highlight tracked bee (works even when paused)
             if (bee === trackedBee) {
+                // Outer glow ring
+                ctx.beginPath();
+                ctx.arc(0, 0, 15, 0, Math.PI * 2);
+                ctx.strokeStyle = 'rgba(255, 215, 0, 0.4)';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+                
+                // Inner tracking ring
                 ctx.beginPath();
                 ctx.arc(0, 0, 12, 0, Math.PI * 2);
                 ctx.strokeStyle = '#FFD700';
                 ctx.lineWidth = 2;
                 ctx.stroke();
                 
-                // Draw tracking line from bee to target
+                // Draw tracking line from bee to target (even when paused)
                 if (bee.targetCell) {
                     ctx.beginPath();
                     ctx.moveTo(0, 0);
                     ctx.lineTo(bee.targetCell.x - bee.x, bee.targetCell.y - bee.y);
-                    ctx.strokeStyle = 'rgba(255, 215, 0, 0.3)';
+                    ctx.strokeStyle = 'rgba(255, 215, 0, 0.5)';
                     ctx.lineWidth = 2;
                     ctx.stroke();
+                    
+                    // Draw target indicator
+                    ctx.save();
+                    ctx.translate(bee.targetCell.x - bee.x, bee.targetCell.y - bee.y);
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 5, 0, Math.PI * 2);
+                    ctx.fillStyle = 'rgba(255, 215, 0, 0.6)';
+                    ctx.fill();
+                    ctx.restore();
                 }
             }
             
@@ -1208,7 +1226,9 @@
                     <div class="tooltip-item">Speed: ${bee.speed.toFixed(2)}</div>
                     <div class="tooltip-item">Efficiency: ${(bee.efficiency * 100).toFixed(0)}%</div>
                     <div class="tooltip-item">Position: (${Math.round(bee.x)}, ${Math.round(bee.y)})</div>
-                    <div class="tooltip-item" style="margin-top: 5px; font-style: italic;">Click to track</div>
+                    <div class="tooltip-item" style="margin-top: 5px; font-style: italic;">
+                        ${bee === trackedBee ? '✅ Currently tracked • Click another bee to switch' : 'Click to track'}
+                    </div>
                 `;
                 showTooltip(e.clientX, e.clientY, content);
             } else if (cell && cell.buildProgress > 0) {
@@ -1230,11 +1250,49 @@
             hideTooltip();
         });
         
-        // Click to track bee
+        // Click to track bee (works even when paused)
         canvas.addEventListener('click', (e) => {
             const bee = getBeeAtPosition(e.clientX, e.clientY);
             if (bee) {
                 trackedBee = bee;
+                // Show confirmation tooltip briefly
+                const content = `
+                    <div class="tooltip-title">✅ Tracking ${bee.type === BEE_TYPES.FORAGER ? 'Forager' : bee.type === BEE_TYPES.BUILDER ? 'Builder' : 'Nurse'}</div>
+                    <div class="tooltip-item">Click "Clear Tracking" to stop</div>
+                `;
+                showTooltip(e.clientX, e.clientY, content);
+                setTimeout(() => {
+                    // Restore normal tooltip after 1 second
+                    const currentBee = getBeeAtPosition(e.clientX, e.clientY);
+                    if (currentBee === bee) {
+                        const typeNames = {
+                            [BEE_TYPES.FORAGER]: 'Forager',
+                            [BEE_TYPES.BUILDER]: 'Builder',
+                            [BEE_TYPES.NURSE]: 'Nurse'
+                        };
+                        const typeColors = {
+                            [BEE_TYPES.FORAGER]: 'bee-forager',
+                            [BEE_TYPES.BUILDER]: 'bee-builder',
+                            [BEE_TYPES.NURSE]: 'bee-nurse'
+                        };
+                        
+                        const normalContent = `
+                            <div class="tooltip-title">🐝 Worker Bee 
+                                <span class="bee-type-badge ${typeColors[bee.type]}">${typeNames[bee.type]}</span>
+                            </div>
+                            <div class="tooltip-item">State: ${bee.state}</div>
+                            <div class="tooltip-item">Carrying: ${bee.carrying ? 'Nectar/Pollen' : 'Empty'}</div>
+                            <div class="tooltip-item">Speed: ${bee.speed.toFixed(2)}</div>
+                            <div class="tooltip-item">Efficiency: ${(bee.efficiency * 100).toFixed(0)}%</div>
+                            <div class="tooltip-item">Position: (${Math.round(bee.x)}, ${Math.round(bee.y)})</div>
+                            <div class="tooltip-item" style="margin-top: 5px; font-style: italic;">Click to track • Currently tracked</div>
+                        `;
+                        showTooltip(e.clientX, e.clientY, normalContent);
+                    }
+                }, 1000);
+            } else {
+                // Clicked on empty space - clear tracking
+                trackedBee = null;
             }
         });
         
