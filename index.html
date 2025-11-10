@@ -104,7 +104,7 @@
         
         .stats {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(4, 1fr);
             gap: 15px;
             margin-top: 20px;
             padding-top: 20px;
@@ -205,6 +205,13 @@
             </div>
         </div>
         
+        <div class="control-group">
+            <label for="hiveSize">Hive Size: <span id="hiveSizeValue">8</span> rings</label>
+            <div class="slider-container">
+                <input type="range" id="hiveSize" min="3" max="15" value="8" step="1">
+            </div>
+        </div>
+        
         <div class="button-group">
             <button id="resetBtn">Reset Simulation</button>
             <button id="pauseBtn">Pause</button>
@@ -239,6 +246,10 @@
                 <div class="stat-value" id="honeyCells">0</div>
             </div>
             <div class="stat-item">
+                <div class="stat-label">Hive Size</div>
+                <div class="stat-value" id="hiveSize">0</div>
+            </div>
+            <div class="stat-item">
                 <div class="stat-label">Active Bees</div>
                 <div class="stat-value" id="activeBees">0</div>
             </div>
@@ -256,12 +267,12 @@
             centerY: canvas.height / 2,
             colonySize: 10,
             resourceAvailability: 50,
+            maxRings: 8,
             isPaused: false
         };
         
         // Hexagon cells
         const cells = [];
-        const maxRings = 8;
         
         // Bees
         const bees = [];
@@ -293,7 +304,7 @@
             });
             
             // Create rings of hexagons
-            for (let ring = 1; ring <= maxRings; ring++) {
+            for (let ring = 1; ring <= config.maxRings; ring++) {
                 const hexagons = getHexRing(0, 0, ring);
                 hexagons.forEach(hex => {
                     const pos = hexToPixel(hex.q, hex.r);
@@ -594,8 +605,18 @@
             const totalBuilt = cells.filter(c => c.buildProgress === 1).length;
             const honeyFilled = cells.filter(c => c.honeyLevel > 0.5).length;
             
+            // Calculate current hive size (furthest ring that has any built cells)
+            let maxRing = 0;
+            cells.forEach(cell => {
+                if (cell.buildProgress > 0) {
+                    const ring = Math.sqrt(cell.q * cell.q + cell.r * cell.r + cell.q * cell.r);
+                    maxRing = Math.max(maxRing, Math.round(ring));
+                }
+            });
+            
             document.getElementById('totalCells').textContent = totalBuilt;
             document.getElementById('honeyCells').textContent = honeyFilled;
+            document.getElementById('hiveSize').textContent = `${maxRing} rings`;
             document.getElementById('activeBees').textContent = config.colonySize;
         }
         
@@ -648,6 +669,50 @@
         document.getElementById('resourceAvailability').addEventListener('input', (e) => {
             config.resourceAvailability = parseInt(e.target.value);
             document.getElementById('resourceValue').textContent = config.resourceAvailability;
+        });
+        
+        document.getElementById('hiveSize').addEventListener('input', (e) => {
+            const newMaxRings = parseInt(e.target.value);
+            document.getElementById('hiveSizeValue').textContent = newMaxRings;
+            
+            if (newMaxRings > config.maxRings) {
+                // Add new rings without disrupting existing cells
+                for (let ring = config.maxRings + 1; ring <= newMaxRings; ring++) {
+                    const hexagons = getHexRing(0, 0, ring);
+                    hexagons.forEach(hex => {
+                        const pos = hexToPixel(hex.q, hex.r);
+                        cells.push({
+                            q: hex.q,
+                            r: hex.r,
+                            x: pos.x,
+                            y: pos.y,
+                            type: CELL_TYPES.EMPTY,
+                            honeyLevel: 0,
+                            buildProgress: 0,
+                            age: 0,
+                            transitionProgress: 1,
+                            previousType: CELL_TYPES.EMPTY
+                        });
+                    });
+                }
+            } else if (newMaxRings < config.maxRings) {
+                // Remove cells beyond the new max ring
+                const maxDistance = newMaxRings + 0.5;
+                for (let i = cells.length - 1; i >= 0; i--) {
+                    const distance = Math.sqrt(cells[i].q * cells[i].q + cells[i].r * cells[i].r + cells[i].q * cells[i].r);
+                    if (distance > maxDistance) {
+                        // Clear any bees targeting this cell
+                        bees.forEach(bee => {
+                            if (bee.targetCell === cells[i]) {
+                                bee.targetCell = null;
+                            }
+                        });
+                        cells.splice(i, 1);
+                    }
+                }
+            }
+            
+            config.maxRings = newMaxRings;
         });
         
         document.getElementById('resetBtn').addEventListener('click', () => {
