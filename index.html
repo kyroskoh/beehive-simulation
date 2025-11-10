@@ -558,6 +558,14 @@
                 <div class="legend-color" style="background: #90EE90; border: 1px solid #333;"></div>
                 <span>Nurse</span>
             </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #87CEEB; border: 1px solid #333;"></div>
+                <span>Scout</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #8B4513; border: 1px solid #333;"></div>
+                <span>Drone</span>
+            </div>
         </div>
         
         <div class="stats">
@@ -662,8 +670,16 @@
             QUEEN: 'queen',
             FORAGER: 'forager',
             BUILDER: 'builder',
-            NURSE: 'nurse'
+            NURSE: 'nurse',
+            SCOUT: 'scout',
+            DRONE: 'drone'
         };
+        
+        // Shared resource information (waggle dance communication)
+        const sharedResources = []; // Array of {cell, discoveredBy, danceCountdown}
+        
+        // Overcrowding threshold
+        const OVERCROWDING_THRESHOLD = 0.8; // bees per cell ratio
         
         // Tracking
         let trackedBee = null;
@@ -819,6 +835,13 @@
             return { x, y };
         }
         
+        function pixelToHex(x, y) {
+            const size = config.hexSize;
+            const q = (2/3 * (x - config.centerX)) / size;
+            const r = (-1/3 * (x - config.centerX) + Math.sqrt(3)/3 * (y - config.centerY)) / size;
+            return { q: Math.round(q), r: Math.round(r) };
+        }
+        
         // Draw hexagon
         function drawHexagon(x, y, size, fillColor, strokeColor = '#8B4513', lineWidth = 2) {
             ctx.beginPath();
@@ -862,25 +885,40 @@
                 // Assign bee type based on colony needs
                 let beeType;
                 const rand = Math.random();
-                if (rand < 0.4) {
-                    beeType = BEE_TYPES.FORAGER; // 40% foragers
-                } else if (rand < 0.75) {
-                    beeType = BEE_TYPES.BUILDER; // 35% builders
+                if (rand < 0.35) {
+                    beeType = BEE_TYPES.FORAGER; // 35% foragers
+                } else if (rand < 0.65) {
+                    beeType = BEE_TYPES.BUILDER; // 30% builders
+                } else if (rand < 0.85) {
+                    beeType = BEE_TYPES.NURSE; // 20% nurses
+                } else if (rand < 0.92) {
+                    beeType = BEE_TYPES.SCOUT; // 7% scouts
                 } else {
-                    beeType = BEE_TYPES.NURSE; // 25% nurses
+                    beeType = BEE_TYPES.DRONE; // 8% drones
                 }
                 
                 bees.push({
                     x: config.centerX + (Math.random() - 0.5) * 100,
                     y: config.centerY + (Math.random() - 0.5) * 100,
                     targetCell: null,
-                    speed: beeType === BEE_TYPES.FORAGER ? 3 + Math.random() * 2 : 2 + Math.random() * 2,
+                    speed: beeType === BEE_TYPES.FORAGER ? 3 + Math.random() * 2 : 
+                           beeType === BEE_TYPES.SCOUT ? 4 + Math.random() * 2 : 
+                           beeType === BEE_TYPES.DRONE ? 1.5 + Math.random() : 
+                           2 + Math.random() * 2,
                     carrying: false,
                     angle: Math.random() * Math.PI * 2,
                     state: 'exploring',
                     type: beeType,
                     efficiency: beeType === BEE_TYPES.FORAGER ? 1.2 : beeType === BEE_TYPES.BUILDER ? 1.1 : 1.0,
-                    name: generateBeeName(beeType)
+                    name: generateBeeName(beeType),
+                    // Waggle dance properties
+                    isDancing: false,
+                    danceCountdown: 0,
+                    discoveredResource: null,
+                    // Scout properties
+                    scoutingTarget: null,
+                    // Drone properties
+                    wanderAngle: Math.random() * Math.PI * 2
                 });
             }
         }
@@ -915,7 +953,7 @@
             }
             
             // Lay eggs in empty brood cells (more frequently)
-            if (queenBee.lastEggTime > 30) { // Lay egg every ~30 frames (faster for visibility)
+            if (queenBee.lastEggTime > 20) { // Lay egg every ~20 frames (faster for visibility)
                 const emptyBroodCells = cells.filter(c => 
                     c.buildProgress === 1 && 
                     (c.type === CELL_TYPES.BROOD || c.type === CELL_TYPES.EMPTY) && 
@@ -960,13 +998,121 @@
         function updateBees() {
             const speedMultiplier = config.simulationSpeed;
             
+            // Update shared resources (waggle dance communication)
+            sharedResources.forEach((resource, index) => {
+                resource.danceCountdown -= speedMultiplier;
+                if (resource.danceCountdown <= 0) {
+                    sharedResources.splice(index, 1);
+                }
+            });
+            
+            // Check for overcrowding
+            const builtCells = cells.filter(c => c.buildProgress === 1).length;
+            const isOvercrowded = builtCells > 0 && (bees.length / builtCells) > OVERCROWDING_THRESHOLD;
+            
             bees.forEach(bee => {
+                // Handle waggle dance
+                if (bee.isDancing) {
+                    bee.danceCountdown -= speedMultiplier;
+                    if (bee.danceCountdown <= 0) {
+                        bee.isDancing = false;
+                        bee.danceCountdown = 0;
+                        // Share resource information
+                        if (bee.discoveredResource) {
+                            sharedResources.push({
+                                cell: bee.discoveredResource,
+                                discoveredBy: bee,
+                                danceCountdown: 60 // Resource info lasts 60 frames
+                            });
+                            bee.discoveredResource = null;
+                        }
+                    }
+                }
+                
+                // Drone behavior - wander around, don't work
+                if (bee.type === BEE_TYPES.DRONE) {
+                    if (!bee.wanderAngle) bee.wanderAngle = Math.random() * Math.PI * 2;
+                    bee.wanderAngle += 0.02 * speedMultiplier;
+                    const wanderRadius = 50;
+                    const targetX = config.centerX + Math.cos(bee.wanderAngle) * wanderRadius;
+                    const targetY = config.centerY + Math.sin(bee.wanderAngle) * wanderRadius;
+                    const dx = targetX - bee.x;
+                    const dy = targetY - bee.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    if (distance > 2) {
+                        bee.x += (dx / distance) * bee.speed * speedMultiplier;
+                        bee.y += (dy / distance) * bee.speed * speedMultiplier;
+                        bee.angle = Math.atan2(dy, dx);
+                    }
+                    // Drones occasionally approach queen
+                    if (queenBee && Math.random() < 0.005) {
+                        const qdx = queenBee.x - bee.x;
+                        const qdy = queenBee.y - bee.y;
+                        const qdist = Math.sqrt(qdx * qdx + qdy * qdy);
+                        if (qdist > 30) {
+                            bee.x += (qdx / qdist) * bee.speed * speedMultiplier * 0.5;
+                            bee.y += (qdy / qdist) * bee.speed * speedMultiplier * 0.5;
+                        }
+                    }
+                    return; // Skip normal bee logic for drones
+                }
+                
+                // Scout behavior - explore edges when overcrowded
+                if (bee.type === BEE_TYPES.SCOUT) {
+                    if (isOvercrowded) {
+                        // Scout explores edges of hive
+                        if (!bee.scoutingTarget || Math.random() < 0.05) {
+                            // Find edge cells or empty space beyond hive
+                            const edgeCells = cells.filter(c => {
+                                const neighbors = getNeighbors(c.q, c.r);
+                                const builtNeighbors = neighbors.filter(n => n && n.buildProgress === 1).length;
+                                return c.buildProgress === 1 && builtNeighbors < 6;
+                            });
+                            if (edgeCells.length > 0) {
+                                bee.scoutingTarget = edgeCells[Math.floor(Math.random() * edgeCells.length)];
+                                bee.targetCell = bee.scoutingTarget;
+                                bee.state = 'scouting';
+                            } else {
+                                // Explore beyond hive
+                                const maxDist = Math.max(...cells.map(c => Math.sqrt(c.q * c.q + c.r * c.r + c.q * c.r)));
+                                const angle = Math.random() * Math.PI * 2;
+                                const dist = maxDist + 2;
+                                const hex = pixelToHex(
+                                    config.centerX + Math.cos(angle) * dist * config.hexSize * 1.5,
+                                    config.centerY + Math.sin(angle) * dist * config.hexSize * 1.5
+                                );
+                                const pos = hexToPixel(hex.q, hex.r);
+                                bee.scoutingTarget = { x: pos.x, y: pos.y, q: hex.q, r: hex.r };
+                                bee.targetCell = bee.scoutingTarget;
+                                bee.state = 'scouting';
+                            }
+                        }
+                    } else {
+                        // When not overcrowded, scouts act like foragers but keep scout type
+                        // They'll use the forager logic below
+                    }
+                }
+                
+                // Check for shared resources (waggle dance communication)
+                if (bee.type === BEE_TYPES.FORAGER && !bee.carrying && !bee.targetCell && sharedResources.length > 0) {
+                    const nearbyResource = sharedResources.find(r => {
+                        const dx = r.cell.x - bee.x;
+                        const dy = r.cell.y - bee.y;
+                        return Math.sqrt(dx * dx + dy * dy) < 100; // Within 100 pixels
+                    });
+                    if (nearbyResource && Math.random() < 0.3) {
+                        // Learn about resource from waggle dance
+                        bee.targetCell = nearbyResource.cell;
+                        bee.state = 'foraging';
+                    }
+                }
+                
                 if (!bee.targetCell || Math.random() < 0.01) {
                     // Select new target
                     const builtCells = cells.filter(c => c.buildProgress > 0);
                     if (builtCells.length > 0) {
                         // Prioritize cells based on bee type and state
-                        if (bee.type === BEE_TYPES.FORAGER) {
+                        if (bee.type === BEE_TYPES.FORAGER || (bee.type === BEE_TYPES.SCOUT && !isOvercrowded)) {
                             // Foragers focus on collecting resources
                             if (bee.carrying) {
                                 // Store honey
@@ -1060,6 +1206,12 @@
                         } else if (bee.state === 'foraging') {
                             // Foragers collect resources
                             bee.carrying = Math.random() < (config.resourceAvailability / 100) * bee.efficiency;
+                            if (bee.carrying && bee.type === BEE_TYPES.FORAGER) {
+                                // Perform waggle dance to share resource location
+                                bee.isDancing = true;
+                                bee.danceCountdown = 30; // Dance for 30 frames
+                                bee.discoveredResource = bee.targetCell;
+                            }
                             bee.targetCell = null;
                         } else if (bee.state === 'nursing') {
                             // Nurses tend to brood cells
@@ -1080,9 +1232,9 @@
             cells.forEach(cell => {
                 cell.age += speedMultiplier;
                 
-                // Update lifecycle progression (slower for better visibility)
+                // Update lifecycle progression
                 if (cell.lifecycleStage) {
-                    cell.lifecycleProgress += 0.005 * speedMultiplier; // Slower progression
+                    cell.lifecycleProgress += 0.01 * speedMultiplier; // Faster progression for visibility
                     
                     if (cell.lifecycleStage === LIFECYCLE_STAGES.EGG && cell.lifecycleProgress >= 0.33) {
                         // Egg -> Larva
@@ -1111,25 +1263,40 @@
                         if (bees.length < config.colonySize * 2) { // Max 2x colony size
                             const rand = Math.random();
                             let beeType;
-                            if (rand < 0.4) {
+                            if (rand < 0.35) {
                                 beeType = BEE_TYPES.FORAGER;
-                            } else if (rand < 0.75) {
+                            } else if (rand < 0.65) {
                                 beeType = BEE_TYPES.BUILDER;
-                            } else {
+                            } else if (rand < 0.85) {
                                 beeType = BEE_TYPES.NURSE;
+                            } else if (rand < 0.92) {
+                                beeType = BEE_TYPES.SCOUT;
+                            } else {
+                                beeType = BEE_TYPES.DRONE;
                             }
                             
                             bees.push({
                                 x: cell.x + (Math.random() - 0.5) * 20,
                                 y: cell.y + (Math.random() - 0.5) * 20,
                                 targetCell: null,
-                                speed: beeType === BEE_TYPES.FORAGER ? 3 + Math.random() * 2 : 2 + Math.random() * 2,
+                                speed: beeType === BEE_TYPES.FORAGER ? 3 + Math.random() * 2 : 
+                                       beeType === BEE_TYPES.SCOUT ? 4 + Math.random() * 2 : 
+                                       beeType === BEE_TYPES.DRONE ? 1.5 + Math.random() : 
+                                       2 + Math.random() * 2,
                                 carrying: false,
                                 angle: Math.random() * Math.PI * 2,
                                 state: 'exploring',
                                 type: beeType,
                                 efficiency: beeType === BEE_TYPES.FORAGER ? 1.2 : beeType === BEE_TYPES.BUILDER ? 1.1 : 1.0,
-                                name: generateBeeName(beeType)
+                                name: generateBeeName(beeType),
+                                // Waggle dance properties
+                                isDancing: false,
+                                danceCountdown: 0,
+                                discoveredResource: null,
+                                // Scout properties
+                                scoutingTarget: null,
+                                // Drone properties
+                                wanderAngle: Math.random() * Math.PI * 2
                             });
                         }
                     }
@@ -1279,31 +1446,73 @@
             
             ctx.rotate(bee.angle);
             
+            // Waggle dance animation
+            if (bee.isDancing) {
+                const danceTime = 30 - bee.danceCountdown;
+                const danceOffset = Math.sin(danceTime * 0.3) * 3; // Figure-8 pattern
+                ctx.translate(danceOffset, Math.cos(danceTime * 0.3) * 2);
+                
+                // Draw dance indicator
+                ctx.beginPath();
+                ctx.arc(0, -8, 8, 0, Math.PI * 2);
+                ctx.strokeStyle = 'rgba(255, 215, 0, 0.6)';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+            
             // Body - color based on bee type
             let bodyColor;
+            let bodySize = 4; // Default size
             if (bee.type === BEE_TYPES.FORAGER) {
                 bodyColor = bee.carrying ? '#FFD700' : '#FFA500'; // Golden when carrying, orange when empty
             } else if (bee.type === BEE_TYPES.BUILDER) {
                 bodyColor = '#FF8C00'; // Dark orange
             } else if (bee.type === BEE_TYPES.NURSE) {
                 bodyColor = '#90EE90'; // Light green
+            } else if (bee.type === BEE_TYPES.SCOUT) {
+                bodyColor = '#87CEEB'; // Sky blue for scouts
+            } else if (bee.type === BEE_TYPES.DRONE) {
+                bodyColor = '#8B4513'; // Brown for drones
+                bodySize = 6; // Drones are larger
             } else {
                 bodyColor = bee.carrying ? '#FFD700' : '#FFA500';
             }
             
             ctx.fillStyle = bodyColor;
             ctx.beginPath();
-            ctx.ellipse(0, 0, 6, 4, 0, 0, Math.PI * 2);
+            ctx.ellipse(0, 0, bodySize, bodySize * 0.75, 0, 0, Math.PI * 2);
             ctx.fill();
+            
+            // Scout marker - small triangle on top
+            if (bee.type === BEE_TYPES.SCOUT) {
+                ctx.fillStyle = '#4169E1';
+                ctx.beginPath();
+                ctx.moveTo(0, -bodySize - 2);
+                ctx.lineTo(-3, -bodySize + 2);
+                ctx.lineTo(3, -bodySize + 2);
+                ctx.closePath();
+                ctx.fill();
+            }
+            
+            // Drone - larger eyes
+            if (bee.type === BEE_TYPES.DRONE) {
+                ctx.fillStyle = '#000';
+                ctx.beginPath();
+                ctx.arc(-2, -1, 1.5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(2, -1, 1.5, 0, Math.PI * 2);
+                ctx.fill();
+            }
             
             // Stripes
             ctx.strokeStyle = '#000';
             ctx.lineWidth = 1;
             ctx.beginPath();
-            ctx.moveTo(-2, -3);
-            ctx.lineTo(-2, 3);
-            ctx.moveTo(2, -3);
-            ctx.lineTo(2, 3);
+            ctx.moveTo(-2, -bodySize * 0.75);
+            ctx.lineTo(-2, bodySize * 0.75);
+            ctx.moveTo(2, -bodySize * 0.75);
+            ctx.lineTo(2, bodySize * 0.75);
             ctx.stroke();
             
             // Wings
@@ -1360,11 +1569,11 @@
                 const currentColor = getCellColor(cell.type, cell.honeyLevel, cell.lifecycleStage, cell.royalJelly);
                 fillColor = interpolateColor(previousColor, currentColor, cell.transitionProgress);
             } else if (cell.type === CELL_TYPES.EGG || cell.lifecycleStage === LIFECYCLE_STAGES.EGG) {
-                fillColor = '#FFFFE0'; // Brighter light yellow for eggs
+                fillColor = '#FFF9C4'; // Bright yellow for eggs (more visible)
             } else if (cell.type === CELL_TYPES.LARVA || cell.lifecycleStage === LIFECYCLE_STAGES.LARVA) {
-                fillColor = '#FFE4B5'; // Brighter light orange for larvae
+                fillColor = '#FFCC80'; // Bright orange for larvae (more visible)
             } else if (cell.type === CELL_TYPES.PUPA || cell.lifecycleStage === LIFECYCLE_STAGES.PUPA) {
-                fillColor = '#E6E6FA'; // Brighter light purple for pupae
+                fillColor = '#CE93D8'; // Bright purple for pupae (more visible)
             } else if (cell.type === CELL_TYPES.BROOD) {
                 fillColor = '#E8E8E8';
             } else if (cell.type === CELL_TYPES.HONEY) {
@@ -1416,55 +1625,70 @@
             drawHexagon(cell.x, cell.y, size, fillColor);
             
             // Draw lifecycle indicators (check both lifecycleStage and type for reliability)
+            // Make them more prominent and visible
             if (cell.lifecycleStage === LIFECYCLE_STAGES.EGG || cell.type === CELL_TYPES.EGG) {
-                // Draw egg - white circle with yellow background
-                ctx.fillStyle = '#FFFF99'; // Bright yellow background
+                // Draw egg - white circle with bright yellow background (more prominent)
+                ctx.fillStyle = '#FFEB3B'; // Bright yellow background
                 ctx.beginPath();
-                ctx.arc(cell.x, cell.y, size * 0.35, 0, Math.PI * 2);
+                ctx.arc(cell.x, cell.y, size * 0.4, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.fillStyle = '#FFFFFF'; // White egg
                 ctx.beginPath();
-                ctx.arc(cell.x, cell.y, size * 0.25, 0, Math.PI * 2);
+                ctx.arc(cell.x, cell.y, size * 0.3, 0, Math.PI * 2);
                 ctx.fill();
                 // Small highlight
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
                 ctx.beginPath();
-                ctx.arc(cell.x - size * 0.1, cell.y - size * 0.1, size * 0.08, 0, Math.PI * 2);
+                ctx.arc(cell.x - size * 0.12, cell.y - size * 0.12, size * 0.1, 0, Math.PI * 2);
                 ctx.fill();
-            } else if (cell.lifecycleStage === LIFECYCLE_STAGES.LARVA || cell.type === CELL_TYPES.LARVA) {
-                // Draw larva - orange wiggly shape
-                ctx.fillStyle = '#FF8C00'; // Dark orange
+                // Add border for visibility
+                ctx.strokeStyle = '#FFC107';
+                ctx.lineWidth = 1.5;
                 ctx.beginPath();
-                ctx.ellipse(cell.x, cell.y, size * 0.3, size * 0.2, 0, 0, Math.PI * 2);
+                ctx.arc(cell.x, cell.y, size * 0.3, 0, Math.PI * 2);
+                ctx.stroke();
+            } else if (cell.lifecycleStage === LIFECYCLE_STAGES.LARVA || cell.type === CELL_TYPES.LARVA) {
+                // Draw larva - orange wiggly shape (more prominent)
+                ctx.fillStyle = '#FF6B00'; // Bright orange
+                ctx.beginPath();
+                ctx.ellipse(cell.x, cell.y, size * 0.35, size * 0.25, 0, 0, Math.PI * 2);
                 ctx.fill();
                 // Add segments for more realistic look
-                ctx.fillStyle = '#FFA500';
+                ctx.fillStyle = '#FF8C00';
                 ctx.beginPath();
-                ctx.ellipse(cell.x - size * 0.15, cell.y, size * 0.1, size * 0.15, 0, 0, Math.PI * 2);
+                ctx.ellipse(cell.x - size * 0.18, cell.y, size * 0.12, size * 0.18, 0, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.beginPath();
-                ctx.ellipse(cell.x + size * 0.15, cell.y, size * 0.1, size * 0.15, 0, 0, Math.PI * 2);
+                ctx.ellipse(cell.x + size * 0.18, cell.y, size * 0.12, size * 0.18, 0, 0, Math.PI * 2);
                 ctx.fill();
+                // Add border
+                ctx.strokeStyle = '#FF4500';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.ellipse(cell.x, cell.y, size * 0.35, size * 0.25, 0, 0, Math.PI * 2);
+                ctx.stroke();
             } else if (cell.lifecycleStage === LIFECYCLE_STAGES.PUPA || cell.type === CELL_TYPES.PUPA) {
-                // Draw pupa - purple cocoon shape
-                ctx.fillStyle = '#9370DB'; // Medium purple
+                // Draw pupa - purple cocoon shape (more prominent)
+                ctx.fillStyle = '#9C27B0'; // Bright purple
                 ctx.beginPath();
-                ctx.ellipse(cell.x, cell.y, size * 0.25, size * 0.35, 0, 0, Math.PI * 2);
+                ctx.ellipse(cell.x, cell.y, size * 0.3, size * 0.4, 0, 0, Math.PI * 2);
                 ctx.fill();
                 // Add darker outline
-                ctx.strokeStyle = '#6A5ACD';
-                ctx.lineWidth = 1.5;
+                ctx.strokeStyle = '#7B1FA2';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.ellipse(cell.x, cell.y, size * 0.3, size * 0.4, 0, 0, Math.PI * 2);
                 ctx.stroke();
                 // Add segments/lines
-                ctx.strokeStyle = '#8A2BE2';
-                ctx.lineWidth = 1;
+                ctx.strokeStyle = '#6A1B9A';
+                ctx.lineWidth = 1.5;
                 ctx.beginPath();
-                ctx.moveTo(cell.x - size * 0.2, cell.y - size * 0.2);
-                ctx.lineTo(cell.x + size * 0.2, cell.y - size * 0.2);
-                ctx.moveTo(cell.x - size * 0.2, cell.y);
-                ctx.lineTo(cell.x + size * 0.2, cell.y);
-                ctx.moveTo(cell.x - size * 0.2, cell.y + size * 0.2);
-                ctx.lineTo(cell.x + size * 0.2, cell.y + size * 0.2);
+                ctx.moveTo(cell.x - size * 0.25, cell.y - size * 0.25);
+                ctx.lineTo(cell.x + size * 0.25, cell.y - size * 0.25);
+                ctx.moveTo(cell.x - size * 0.25, cell.y);
+                ctx.lineTo(cell.x + size * 0.25, cell.y);
+                ctx.moveTo(cell.x - size * 0.25, cell.y + size * 0.25);
+                ctx.lineTo(cell.x + size * 0.25, cell.y + size * 0.25);
                 ctx.stroke();
             }
             
@@ -1730,7 +1954,9 @@
                 const typeNames = {
                     [BEE_TYPES.FORAGER]: 'Forager',
                     [BEE_TYPES.BUILDER]: 'Builder',
-                    [BEE_TYPES.NURSE]: 'Nurse'
+                    [BEE_TYPES.NURSE]: 'Nurse',
+                    [BEE_TYPES.SCOUT]: 'Scout',
+                    [BEE_TYPES.DRONE]: 'Drone'
                 };
                 return typeNames[bee.type] || bee.type;
             });
@@ -1748,7 +1974,9 @@
             const beeTypeCounts = {
                 forager: incomingBees.filter(b => b.type === BEE_TYPES.FORAGER).length,
                 builder: incomingBees.filter(b => b.type === BEE_TYPES.BUILDER).length,
-                nurse: incomingBees.filter(b => b.type === BEE_TYPES.NURSE).length
+                nurse: incomingBees.filter(b => b.type === BEE_TYPES.NURSE).length,
+                scout: incomingBees.filter(b => b.type === BEE_TYPES.SCOUT).length,
+                drone: incomingBees.filter(b => b.type === BEE_TYPES.DRONE).length
             };
             
             trackedCellContent.innerHTML = `
@@ -1775,15 +2003,31 @@
                         ${cell.lifecycleStage ? `
                         <div class="tracked-stat-item" style="margin-top: 5px;">
                             <span class="tracked-stat-label">📈 Growth Progress</span>
-                            <span class="tracked-stat-value" style="font-weight: bold; color: #667eea;">${(cell.lifecycleProgress * 100).toFixed(1)}%</span>
+                            <span class="tracked-stat-value" style="font-weight: bold; color: #667eea;">${((cell.lifecycleProgress || 0) * 100).toFixed(1)}%</span>
                         </div>
                         <div class="tracked-stat-bar">
-                            <div class="tracked-stat-bar-fill" style="width: ${cell.lifecycleProgress * 100}%"></div>
+                            <div class="tracked-stat-bar-fill" style="width: ${Math.min(100, (cell.lifecycleProgress || 0) * 100)}%"></div>
                         </div>
+                        ${cell.lifecycleStage === LIFECYCLE_STAGES.EGG ? `
+                        <div style="margin-top: 5px; font-size: 11px; color: #666;">
+                            Next: 🐛 Larva at 33%
+                        </div>
+                        ` : cell.lifecycleStage === LIFECYCLE_STAGES.LARVA ? `
+                        <div style="margin-top: 5px; font-size: 11px; color: #666;">
+                            Next: 🦋 Pupa at 33%
+                        </div>
+                        ` : cell.lifecycleStage === LIFECYCLE_STAGES.PUPA ? `
+                        <div style="margin-top: 5px; font-size: 11px; color: #666;">
+                            Next: 🐝 Adult Bee at 33%
+                        </div>
+                        ` : ''}
                         ` : `
                         <div class="tracked-stat-item" style="margin-top: 5px;">
                             <span class="tracked-stat-label">📈 Growth Progress</span>
                             <span class="tracked-stat-value" style="color: #999;">0%</span>
+                        </div>
+                        <div style="margin-top: 5px; font-size: 11px; color: #999; font-style: italic;">
+                            No lifecycle stage active
                         </div>
                         `}
                     </div>
@@ -1843,6 +2087,8 @@
                             ${beeTypeCounts.forager > 0 ? `<div>• ${beeTypeCounts.forager} Forager${beeTypeCounts.forager > 1 ? 's' : ''}</div>` : ''}
                             ${beeTypeCounts.builder > 0 ? `<div>• ${beeTypeCounts.builder} Builder${beeTypeCounts.builder > 1 ? 's' : ''}</div>` : ''}
                             ${beeTypeCounts.nurse > 0 ? `<div>• ${beeTypeCounts.nurse} Nurse${beeTypeCounts.nurse > 1 ? 's' : ''}</div>` : ''}
+                            ${beeTypeCounts.scout > 0 ? `<div>• ${beeTypeCounts.scout} Scout${beeTypeCounts.scout > 1 ? 's' : ''}</div>` : ''}
+                            ${beeTypeCounts.drone > 0 ? `<div>• ${beeTypeCounts.drone} Drone${beeTypeCounts.drone > 1 ? 's' : ''}</div>` : ''}
                         </div>
                         ${config.beeNaming.enabled ? `
                         <div style="margin-top: 8px; font-size: 11px; color: #888; max-height: 100px; overflow-y: auto;">
@@ -1874,12 +2120,16 @@
             const typeNames = {
                 [BEE_TYPES.FORAGER]: 'Forager',
                 [BEE_TYPES.BUILDER]: 'Builder',
-                [BEE_TYPES.NURSE]: 'Nurse'
+                [BEE_TYPES.NURSE]: 'Nurse',
+                [BEE_TYPES.SCOUT]: 'Scout',
+                [BEE_TYPES.DRONE]: 'Drone'
             };
             const typeColors = {
                 [BEE_TYPES.FORAGER]: 'bee-forager',
                 [BEE_TYPES.BUILDER]: 'bee-builder',
-                [BEE_TYPES.NURSE]: 'bee-nurse'
+                [BEE_TYPES.NURSE]: 'bee-nurse',
+                [BEE_TYPES.SCOUT]: 'bee-forager', // Use forager color for scouts
+                [BEE_TYPES.DRONE]: 'bee-builder' // Use builder color for drones
             };
             
             const bee = trackedBee;
@@ -1992,25 +2242,40 @@
             while (bees.length < config.colonySize) {
                 const rand = Math.random();
                 let beeType;
-                if (rand < 0.4) {
+                if (rand < 0.35) {
                     beeType = BEE_TYPES.FORAGER;
-                } else if (rand < 0.75) {
+                } else if (rand < 0.65) {
                     beeType = BEE_TYPES.BUILDER;
-                } else {
+                } else if (rand < 0.85) {
                     beeType = BEE_TYPES.NURSE;
+                } else if (rand < 0.92) {
+                    beeType = BEE_TYPES.SCOUT;
+                } else {
+                    beeType = BEE_TYPES.DRONE;
                 }
                 
                 bees.push({
                     x: config.centerX + (Math.random() - 0.5) * 100,
                     y: config.centerY + (Math.random() - 0.5) * 100,
                     targetCell: null,
-                    speed: beeType === BEE_TYPES.FORAGER ? 3 + Math.random() * 2 : 2 + Math.random() * 2,
+                    speed: beeType === BEE_TYPES.FORAGER ? 3 + Math.random() * 2 : 
+                           beeType === BEE_TYPES.SCOUT ? 4 + Math.random() * 2 : 
+                           beeType === BEE_TYPES.DRONE ? 1.5 + Math.random() : 
+                           2 + Math.random() * 2,
                     carrying: false,
                     angle: Math.random() * Math.PI * 2,
                     state: 'exploring',
                     type: beeType,
                     efficiency: beeType === BEE_TYPES.FORAGER ? 1.2 : beeType === BEE_TYPES.BUILDER ? 1.1 : 1.0,
-                    name: generateBeeName(beeType)
+                    name: generateBeeName(beeType),
+                    // Waggle dance properties
+                    isDancing: false,
+                    danceCountdown: 0,
+                    discoveredResource: null,
+                    // Scout properties
+                    scoutingTarget: null,
+                    // Drone properties
+                    wanderAngle: Math.random() * Math.PI * 2
                 });
             }
             while (bees.length > config.colonySize) {
@@ -2138,23 +2403,32 @@
                 const typeNames = {
                     [BEE_TYPES.FORAGER]: 'Forager',
                     [BEE_TYPES.BUILDER]: 'Builder',
-                    [BEE_TYPES.NURSE]: 'Nurse'
+                    [BEE_TYPES.NURSE]: 'Nurse',
+                    [BEE_TYPES.SCOUT]: 'Scout',
+                    [BEE_TYPES.DRONE]: 'Drone'
                 };
                 const typeColors = {
                     [BEE_TYPES.FORAGER]: 'bee-forager',
                     [BEE_TYPES.BUILDER]: 'bee-builder',
-                    [BEE_TYPES.NURSE]: 'bee-nurse'
+                    [BEE_TYPES.NURSE]: 'bee-nurse',
+                    [BEE_TYPES.SCOUT]: 'bee-forager',
+                    [BEE_TYPES.DRONE]: 'bee-builder'
                 };
                 
+                const beeTypeLabel = bee.type === BEE_TYPES.DRONE ? '🐝 Drone Bee' : 
+                                     bee.type === BEE_TYPES.SCOUT ? '🔍 Scout Bee' : 
+                                     '🐝 Worker Bee';
                 const content = `
-                    <div class="tooltip-title">🐝 Worker Bee 
+                    <div class="tooltip-title">${beeTypeLabel} 
                         <span class="bee-type-badge ${typeColors[bee.type]}">${typeNames[bee.type]}</span>
                     </div>
                     ${bee.name ? `<div class="tooltip-item" style="font-weight: bold; color: #667eea;">Name: ${bee.name}</div>` : ''}
-                    <div class="tooltip-item">State: ${bee.state}</div>
-                    <div class="tooltip-item">Carrying: ${bee.carrying ? 'Nectar/Pollen' : 'Empty'}</div>
+                    <div class="tooltip-item">State: ${bee.state}${bee.isDancing ? ' (Dancing!)' : ''}</div>
+                    ${bee.type !== BEE_TYPES.DRONE ? `<div class="tooltip-item">Carrying: ${bee.carrying ? 'Nectar/Pollen' : 'Empty'}</div>` : ''}
                     <div class="tooltip-item">Speed: ${bee.speed.toFixed(2)}</div>
-                    <div class="tooltip-item">Efficiency: ${(bee.efficiency * 100).toFixed(0)}%</div>
+                    ${bee.type !== BEE_TYPES.DRONE ? `<div class="tooltip-item">Efficiency: ${(bee.efficiency * 100).toFixed(0)}%</div>` : ''}
+                    ${bee.type === BEE_TYPES.SCOUT ? `<div class="tooltip-item" style="color: #4169E1;">🔍 Exploring for expansion areas</div>` : ''}
+                    ${bee.type === BEE_TYPES.DRONE ? `<div class="tooltip-item" style="color: #8B4513;">Wandering (non-worker)</div>` : ''}
                     <div class="tooltip-item">Position: (${Math.round(bee.x)}, ${Math.round(bee.y)})</div>
                     <div class="tooltip-item" style="margin-top: 5px; font-style: italic;">
                         ${bee === trackedBee ? '✅ Currently tracked • Click another bee to switch' : 'Click to track'}
@@ -2229,8 +2503,15 @@
                 // Don't clear cell tracking - both can be tracked simultaneously
                 updateAllTrackedStats(); // Update stats panels immediately
                 // Show confirmation tooltip briefly
+                const typeNamesMap = {
+                    [BEE_TYPES.FORAGER]: 'Forager',
+                    [BEE_TYPES.BUILDER]: 'Builder',
+                    [BEE_TYPES.NURSE]: 'Nurse',
+                    [BEE_TYPES.SCOUT]: 'Scout',
+                    [BEE_TYPES.DRONE]: 'Drone'
+                };
                 const content = `
-                    <div class="tooltip-title">✅ Tracking ${bee.type === BEE_TYPES.FORAGER ? 'Forager' : bee.type === BEE_TYPES.BUILDER ? 'Builder' : 'Nurse'}</div>
+                    <div class="tooltip-title">✅ Tracking ${typeNamesMap[bee.type] || bee.type}</div>
                     <div class="tooltip-item">Stats shown in side panel</div>
                 `;
                 showTooltip(e.clientX, e.clientY, content);

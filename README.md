@@ -25,10 +25,12 @@ An interactive, real-time simulation of honeybee colony behavior and honeycomb c
   - Moves slowly around hive center
   - Distinctive pink/magenta color with golden crown
   - Tracks eggs laid and royal jelly production
-- **Worker Bee Specialization**: Three distinct bee types with unique behaviors:
-  - **Foragers** (40%): Fast-moving bees focused on collecting nectar and pollen
-  - **Builders** (35%): Specialized in constructing new cells efficiently
-  - **Nurses** (25%): Care for brood cells and tend to larvae
+- **Worker Bee Specialization**: Five distinct bee types with unique behaviors:
+  - **Foragers** (35%): Fast-moving bees focused on collecting nectar and pollen, perform waggle dances
+  - **Builders** (30%): Specialized in constructing new cells efficiently
+  - **Nurses** (20%): Care for brood cells and tend to larvae
+  - **Scouts** (7%): Explore hive edges and beyond when overcrowded, searching for expansion areas
+  - **Drones** (8%): Male bees that wander around the hive, don't perform work tasks
 - **Bee Lifecycle System**: Complete lifecycle simulation:
   - **Eggs**: Laid by queen in brood cells (light yellow)
   - **Larvae**: Develop from eggs, fed by nurses (light orange)
@@ -40,12 +42,25 @@ An interactive, real-time simulation of honeybee colony behavior and honeycomb c
 - **Autonomous Agents**: Each bee operates independently with its own decision-making
 - **Task Switching**: Bees adapt their tasks based on colony needs
 - **Pathfinding**: Smooth movement and navigation to target cells
-- **Visual Identification**: Bees colored by type (golden/orange foragers, dark orange builders, green nurses)
+- **Visual Identification**: Bees colored by type (golden/orange foragers, dark orange builders, green nurses, sky blue scouts, brown drones)
 - **Wing Animation**: Realistic flapping wing animation
 - **Bee Naming System**: Each bee gets a unique random name or ID
   - Names appear in tooltips, tracked stats, and cell activity panels
   - Configurable naming formats (numbers, names, or mixed)
   - Names help identify and track individual bees throughout the simulation
+- **Waggle Dance Communication**: Foragers perform dance movements when finding good resources
+  - Dancing bees share resource locations with nearby foragers
+  - Other bees can learn about resources from dances
+  - Visual dance animation with golden indicator rings
+- **Scout Bees**: Specialized explorers that activate when hive is overcrowded
+  - Detect overcrowding automatically (bees per cell ratio)
+  - Explore edges of hive and beyond for expansion opportunities
+  - Sky blue color with triangular marker for easy identification
+- **Drone Bees**: Male bees with unique non-working behavior
+  - Wander around hive in circular patterns
+  - Occasionally approach queen bee
+  - Larger size and brown color, distinctive large eyes
+  - Don't perform work tasks (no foraging, building, or nursing)
 
 ### 🍯 Honey Storage System
 - **Progressive Filling**: Cells fill with honey gradually as bees make multiple trips
@@ -252,9 +267,11 @@ The deployment happens automatically on every push to the main branch, or you ca
 | Type | Color | Description |
 |------|-------|-------------|
 | Queen | Pink/Magenta | Royal bee that lays eggs and produces royal jelly |
-| Forager | Golden/Orange | Fast-moving resource collectors |
+| Forager | Golden/Orange | Fast-moving resource collectors, perform waggle dances |
 | Builder | Dark Orange | Construction specialists |
 | Nurse | Green | Caretakers for developing bees |
+| Scout | Sky Blue | Explorers that search for expansion areas when overcrowded |
+| Drone | Brown | Male bees that wander, don't perform work tasks |
 
 ## 🎨 Customization
 
@@ -328,9 +345,9 @@ Potential features for future versions:
 - [x] **Worker bee specialization** (foragers, nurses, builders) ✅
 - [x] **Queen bee** with special behaviors (laying eggs, royal jelly production) ✅
 - [x] **Bee lifecycle** (eggs → larvae → pupae → adult bees) ✅
-- [ ] **Waggle dance communication** - bees sharing resource locations
-- [ ] **Scout bees** - exploring for new hive locations when overcrowded
-- [ ] **Drone bees** - male bees with different behaviors
+- [x] **Waggle dance communication** - bees sharing resource locations
+- [x] **Scout bees** - exploring for new hive locations when overcrowded
+- [x] **Drone bees** - male bees with different behaviors
 
 ### 🌍 Environmental Factors
 - [ ] **Seasonal resource variations** (spring bloom, summer abundance, winter scarcity)
