@@ -209,6 +209,10 @@
             box-shadow: 0 0 15px 3px rgba(255, 215, 0, 0.8);
         }
         
+        .tracked-cell {
+            box-shadow: 0 0 20px 5px rgba(100, 150, 255, 0.8);
+        }
+        
         .tips {
             background: rgba(255, 255, 255, 0.95);
             padding: 15px 20px;
@@ -337,6 +341,24 @@
             display: block;
         }
         
+        #trackedCellStats {
+            position: fixed;
+            left: 20px;
+            top: 20px;
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            min-width: 250px;
+            max-width: 300px;
+            display: none;
+            z-index: 100;
+        }
+        
+        #trackedCellStats.visible {
+            display: block;
+        }
+        
         .tracked-bee-header {
             display: flex;
             align-items: center;
@@ -417,6 +439,15 @@
     
     <div id="tooltip"></div>
     
+    <div id="trackedCellStats">
+        <div class="tracked-bee-header">
+            <span class="tracked-bee-title">📊 Tracked Cell Stats</span>
+        </div>
+        <div id="trackedCellContent">
+            <div class="no-bee-tracked">No cell tracked<br>Click a cell to track it</div>
+        </div>
+    </div>
+    
     <div id="trackedBeeStats">
         <div class="tracked-bee-header">
             <span class="tracked-bee-title">📊 Tracked Bee Stats</span>
@@ -449,9 +480,24 @@
         </div>
         
         <div class="control-group">
-            <label for="simulationSpeed">Simulation Speed: <span id="speedValue">1.0</span>x</label>
+            <label for="simulationSpeed">Simulation Speed: <span id="speedValue">0.50</span>x</label>
             <div class="slider-container">
-                <input type="range" id="simulationSpeed" min="0.25" max="4" value="1" step="0.25">
+                <input type="range" id="simulationSpeed" min="0.25" max="4" value="0.5" step="0.25">
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <label>
+                <input type="checkbox" id="beeNamingEnabled" checked>
+                Enable Bee Naming
+            </label>
+            <div style="margin-top: 8px;">
+                <label for="beeNamingFormat" style="font-size: 13px; color: #666;">Naming Format:</label>
+                <select id="beeNamingFormat" style="margin-top: 5px; padding: 5px 10px; border-radius: 5px; border: 1px solid #ddd; width: 100%;">
+                    <option value="mixed">Mixed (Numbers & Names)</option>
+                    <option value="number">Numbers Only (e.g., forager#001)</option>
+                    <option value="name">Names Only (e.g., forager-ben)</option>
+                </select>
             </div>
         </div>
         
@@ -533,15 +579,34 @@
             </div>
         </div>
         
+        <div class="stats" style="margin-top: 10px;">
+            <div class="stat-item">
+                <div class="stat-label">🥚 Eggs</div>
+                <div class="stat-value" id="eggCount">0</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">🐛 Larvae</div>
+                <div class="stat-value" id="larvaCount">0</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">🦋 Pupae</div>
+                <div class="stat-value" id="pupaCount">0</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">👑 Queen Eggs</div>
+                <div class="stat-value" id="queenEggs">0</div>
+            </div>
+        </div>
+        
         <div class="tips">
             <div class="tips-title">💡 Interactive Tips</div>
             <ul class="tips-list">
-                <li><span class="tip-icon">🖱️</span><strong>Click on a bee</strong> to track it (works when paused too!)</li>
-                <li><span class="tip-icon">📊</span><strong>Tracked bee stats</strong> appear in the side panel for continuous monitoring</li>
+                <li><span class="tip-icon">🖱️</span><strong>Click on a bee or cell</strong> to track it (works when paused too!)</li>
+                <li><span class="tip-icon">📊</span><strong>Tracked stats</strong> appear in the side panel for continuous monitoring</li>
                 <li><span class="tip-icon">👆</span><strong>Hover over bees or cells</strong> to see detailed information</li>
                 <li><span class="tip-icon">⚡</span><strong>Adjust speed</strong> to watch in slow motion or fast forward</li>
                 <li><span class="tip-icon">📏</span><strong>Change hive size live</strong> without interrupting the simulation</li>
-                <li><span class="tip-icon">🔄</span><strong>Click another bee</strong> to switch tracking, or click empty space to clear</li>
+                <li><span class="tip-icon">🔄</span><strong>Track both simultaneously</strong> - bees (right panel) and cells (left panel) independently</li>
             </ul>
         </div>
         
@@ -575,8 +640,12 @@
             colonySize: 10,
             resourceAvailability: 50,
             maxRings: 8,
-            simulationSpeed: 1.0,
-            isPaused: false
+            simulationSpeed: 0.5,
+            isPaused: false,
+            beeNaming: {
+                enabled: true,
+                format: 'mixed' // 'number', 'name', or 'mixed'
+            }
         };
         
         // Hexagon cells
@@ -598,6 +667,7 @@
         
         // Tracking
         let trackedBee = null;
+        let trackedCell = null;
         
         // Tooltip
         const tooltip = document.getElementById('tooltip');
@@ -605,6 +675,10 @@
         // Tracked bee stats panel
         const trackedBeeStats = document.getElementById('trackedBeeStats');
         const trackedBeeContent = document.getElementById('trackedBeeContent');
+        
+        // Tracked cell stats panel
+        const trackedCellStats = document.getElementById('trackedCellStats');
+        const trackedCellContent = document.getElementById('trackedCellContent');
         
         // Stats history for graphs
         const statsHistory = {
@@ -615,6 +689,40 @@
         
         // Chart update counter
         let chartUpdateCounter = 0;
+        
+        // Bee name generation
+        const beeNameParts = [
+            'buzz', 'honey', 'nectar', 'pollen', 'amber', 'gold', 'sun', 'flower',
+            'bee', 'wing', 'sting', 'hive', 'comb', 'wax', 'royal', 'queen',
+            'ben', 'buzz', 'buzzy', 'honey', 'amber', 'goldie', 'sunny', 'flora'
+        ];
+        
+        let beeCounter = 0; // Counter for numbered names
+        
+        function generateBeeName(beeType) {
+            if (!config.beeNaming.enabled) {
+                return null;
+            }
+            
+            const typePrefix = beeType === BEE_TYPES.QUEEN ? 'queen' : beeType;
+            const format = config.beeNaming.format;
+            
+            if (format === 'number') {
+                beeCounter++;
+                return `${typePrefix}#${String(beeCounter).padStart(3, '0')}`;
+            } else if (format === 'name') {
+                const randomPart = beeNameParts[Math.floor(Math.random() * beeNameParts.length)];
+                return `${typePrefix}-${randomPart}`;
+            } else { // 'mixed'
+                if (Math.random() < 0.5) {
+                    beeCounter++;
+                    return `${typePrefix}#${String(beeCounter).padStart(3, '0')}`;
+                } else {
+                    const randomPart = beeNameParts[Math.floor(Math.random() * beeNameParts.length)];
+                    return `${typePrefix}-${randomPart}`;
+                }
+            }
+        }
         
         // Cell types
         const CELL_TYPES = {
@@ -741,7 +849,9 @@
                 state: 'laying',
                 eggsLaid: 0,
                 lastEggTime: 0,
-                royalJellyProduction: 0
+                royalJellyProduction: 0,
+                name: generateBeeName(BEE_TYPES.QUEEN),
+                type: BEE_TYPES.QUEEN
             };
         }
         
@@ -769,7 +879,8 @@
                     angle: Math.random() * Math.PI * 2,
                     state: 'exploring',
                     type: beeType,
-                    efficiency: beeType === BEE_TYPES.FORAGER ? 1.2 : beeType === BEE_TYPES.BUILDER ? 1.1 : 1.0
+                    efficiency: beeType === BEE_TYPES.FORAGER ? 1.2 : beeType === BEE_TYPES.BUILDER ? 1.1 : 1.0,
+                    name: generateBeeName(beeType)
                 });
             }
         }
@@ -803,20 +914,28 @@
                 queenBee.angle = Math.atan2(dy, dx);
             }
             
-            // Lay eggs in empty brood cells
-            if (queenBee.lastEggTime > 60) { // Lay egg every ~60 frames
+            // Lay eggs in empty brood cells (more frequently)
+            if (queenBee.lastEggTime > 30) { // Lay egg every ~30 frames (faster for visibility)
                 const emptyBroodCells = cells.filter(c => 
                     c.buildProgress === 1 && 
-                    c.type === CELL_TYPES.BROOD && 
-                    !c.lifecycleStage
+                    (c.type === CELL_TYPES.BROOD || c.type === CELL_TYPES.EMPTY) && 
+                    !c.lifecycleStage &&
+                    c.honeyLevel === 0
                 );
                 
                 if (emptyBroodCells.length > 0) {
                     const targetCell = emptyBroodCells[Math.floor(Math.random() * emptyBroodCells.length)];
+                    // Convert to brood if it's empty
+                    if (targetCell.type === CELL_TYPES.EMPTY) {
+                        targetCell.previousType = CELL_TYPES.EMPTY;
+                        targetCell.type = CELL_TYPES.BROOD;
+                        targetCell.transitionProgress = 0;
+                    }
+                    // Lay egg
                     targetCell.lifecycleStage = LIFECYCLE_STAGES.EGG;
                     targetCell.lifecycleProgress = 0;
                     targetCell.type = CELL_TYPES.EGG;
-                    targetCell.previousType = CELL_TYPES.BROOD;
+                    targetCell.previousType = targetCell.previousType || CELL_TYPES.BROOD;
                     targetCell.transitionProgress = 0;
                     queenBee.eggsLaid++;
                     queenBee.lastEggTime = 0;
@@ -961,9 +1080,9 @@
             cells.forEach(cell => {
                 cell.age += speedMultiplier;
                 
-                // Update lifecycle progression
+                // Update lifecycle progression (slower for better visibility)
                 if (cell.lifecycleStage) {
-                    cell.lifecycleProgress += 0.01 * speedMultiplier;
+                    cell.lifecycleProgress += 0.005 * speedMultiplier; // Slower progression
                     
                     if (cell.lifecycleStage === LIFECYCLE_STAGES.EGG && cell.lifecycleProgress >= 0.33) {
                         // Egg -> Larva
@@ -1009,7 +1128,8 @@
                                 angle: Math.random() * Math.PI * 2,
                                 state: 'exploring',
                                 type: beeType,
-                                efficiency: beeType === BEE_TYPES.FORAGER ? 1.2 : beeType === BEE_TYPES.BUILDER ? 1.1 : 1.0
+                                efficiency: beeType === BEE_TYPES.FORAGER ? 1.2 : beeType === BEE_TYPES.BUILDER ? 1.1 : 1.0,
+                                name: generateBeeName(beeType)
                             });
                         }
                     }
@@ -1034,8 +1154,8 @@
                     }
                 }
                 
-                // Randomly convert some cells to brood (if not already a lifecycle cell)
-                if (cell.buildProgress === 1 && cell.type === CELL_TYPES.EMPTY && !cell.lifecycleStage && Math.random() < 0.0005) {
+                // Randomly convert some cells to brood (if not already a lifecycle cell) - more frequently
+                if (cell.buildProgress === 1 && cell.type === CELL_TYPES.EMPTY && !cell.lifecycleStage && Math.random() < 0.001) {
                     cell.previousType = cell.type;
                     cell.type = CELL_TYPES.BROOD;
                     cell.transitionProgress = 0;
@@ -1239,12 +1359,12 @@
                 const previousColor = getCellColor(cell.previousType, cell.honeyLevel, cell.lifecycleStage, cell.royalJelly);
                 const currentColor = getCellColor(cell.type, cell.honeyLevel, cell.lifecycleStage, cell.royalJelly);
                 fillColor = interpolateColor(previousColor, currentColor, cell.transitionProgress);
-            } else if (cell.type === CELL_TYPES.EGG) {
-                fillColor = '#FFFFC8'; // Light yellow
-            } else if (cell.type === CELL_TYPES.LARVA) {
-                fillColor = '#FFC896'; // Light orange
-            } else if (cell.type === CELL_TYPES.PUPA) {
-                fillColor = '#C8C8FF'; // Light purple
+            } else if (cell.type === CELL_TYPES.EGG || cell.lifecycleStage === LIFECYCLE_STAGES.EGG) {
+                fillColor = '#FFFFE0'; // Brighter light yellow for eggs
+            } else if (cell.type === CELL_TYPES.LARVA || cell.lifecycleStage === LIFECYCLE_STAGES.LARVA) {
+                fillColor = '#FFE4B5'; // Brighter light orange for larvae
+            } else if (cell.type === CELL_TYPES.PUPA || cell.lifecycleStage === LIFECYCLE_STAGES.PUPA) {
+                fillColor = '#E6E6FA'; // Brighter light purple for pupae
             } else if (cell.type === CELL_TYPES.BROOD) {
                 fillColor = '#E8E8E8';
             } else if (cell.type === CELL_TYPES.HONEY) {
@@ -1255,27 +1375,97 @@
             }
             
             const size = config.hexSize * cell.buildProgress;
+            
+            // Highlight tracked cell
+            if (cell === trackedCell) {
+                // Draw outer glow
+                ctx.shadowColor = 'rgba(100, 150, 255, 0.8)';
+                ctx.shadowBlur = 15;
+                drawHexagon(cell.x, cell.y, size + 2, fillColor);
+                ctx.shadowBlur = 0;
+                
+                // Draw lines to incoming bees
+                bees.forEach(bee => {
+                    if (bee.targetCell === cell) {
+                        ctx.beginPath();
+                        ctx.moveTo(cell.x, cell.y);
+                        ctx.lineTo(bee.x, bee.y);
+                        ctx.strokeStyle = 'rgba(100, 150, 255, 0.4)';
+                        ctx.lineWidth = 2;
+                        ctx.setLineDash([5, 5]);
+                        ctx.stroke();
+                        ctx.setLineDash([]);
+                        
+                        // Draw arrow at bee end
+                        const angle = Math.atan2(bee.y - cell.y, bee.x - cell.x);
+                        ctx.save();
+                        ctx.translate(bee.x, bee.y);
+                        ctx.rotate(angle);
+                        ctx.fillStyle = 'rgba(100, 150, 255, 0.6)';
+                        ctx.beginPath();
+                        ctx.moveTo(0, 0);
+                        ctx.lineTo(-8, -4);
+                        ctx.lineTo(-8, 4);
+                        ctx.closePath();
+                        ctx.fill();
+                        ctx.restore();
+                    }
+                });
+            }
+            
             drawHexagon(cell.x, cell.y, size, fillColor);
             
-            // Draw lifecycle indicators
-            if (cell.lifecycleStage === LIFECYCLE_STAGES.EGG) {
-                // Draw small white circle for egg
-                ctx.fillStyle = '#FFFFFF';
+            // Draw lifecycle indicators (check both lifecycleStage and type for reliability)
+            if (cell.lifecycleStage === LIFECYCLE_STAGES.EGG || cell.type === CELL_TYPES.EGG) {
+                // Draw egg - white circle with yellow background
+                ctx.fillStyle = '#FFFF99'; // Bright yellow background
                 ctx.beginPath();
-                ctx.arc(cell.x, cell.y, size * 0.2, 0, Math.PI * 2);
+                ctx.arc(cell.x, cell.y, size * 0.35, 0, Math.PI * 2);
                 ctx.fill();
-            } else if (cell.lifecycleStage === LIFECYCLE_STAGES.LARVA) {
-                // Draw wiggly larva shape
-                ctx.fillStyle = '#FF8C00';
+                ctx.fillStyle = '#FFFFFF'; // White egg
                 ctx.beginPath();
-                ctx.ellipse(cell.x, cell.y, size * 0.25, size * 0.15, 0, 0, Math.PI * 2);
+                ctx.arc(cell.x, cell.y, size * 0.25, 0, Math.PI * 2);
                 ctx.fill();
-            } else if (cell.lifecycleStage === LIFECYCLE_STAGES.PUPA) {
-                // Draw cocoon shape
-                ctx.fillStyle = '#9370DB';
+                // Small highlight
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
                 ctx.beginPath();
-                ctx.ellipse(cell.x, cell.y, size * 0.2, size * 0.3, 0, 0, Math.PI * 2);
+                ctx.arc(cell.x - size * 0.1, cell.y - size * 0.1, size * 0.08, 0, Math.PI * 2);
                 ctx.fill();
+            } else if (cell.lifecycleStage === LIFECYCLE_STAGES.LARVA || cell.type === CELL_TYPES.LARVA) {
+                // Draw larva - orange wiggly shape
+                ctx.fillStyle = '#FF8C00'; // Dark orange
+                ctx.beginPath();
+                ctx.ellipse(cell.x, cell.y, size * 0.3, size * 0.2, 0, 0, Math.PI * 2);
+                ctx.fill();
+                // Add segments for more realistic look
+                ctx.fillStyle = '#FFA500';
+                ctx.beginPath();
+                ctx.ellipse(cell.x - size * 0.15, cell.y, size * 0.1, size * 0.15, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.ellipse(cell.x + size * 0.15, cell.y, size * 0.1, size * 0.15, 0, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (cell.lifecycleStage === LIFECYCLE_STAGES.PUPA || cell.type === CELL_TYPES.PUPA) {
+                // Draw pupa - purple cocoon shape
+                ctx.fillStyle = '#9370DB'; // Medium purple
+                ctx.beginPath();
+                ctx.ellipse(cell.x, cell.y, size * 0.25, size * 0.35, 0, 0, Math.PI * 2);
+                ctx.fill();
+                // Add darker outline
+                ctx.strokeStyle = '#6A5ACD';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+                // Add segments/lines
+                ctx.strokeStyle = '#8A2BE2';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(cell.x - size * 0.2, cell.y - size * 0.2);
+                ctx.lineTo(cell.x + size * 0.2, cell.y - size * 0.2);
+                ctx.moveTo(cell.x - size * 0.2, cell.y);
+                ctx.lineTo(cell.x + size * 0.2, cell.y);
+                ctx.moveTo(cell.x - size * 0.2, cell.y + size * 0.2);
+                ctx.lineTo(cell.x + size * 0.2, cell.y + size * 0.2);
+                ctx.stroke();
             }
             
             // Draw royal jelly indicator (sparkle effect)
@@ -1312,14 +1502,18 @@
                 }
             });
             
-            const eggs = cells.filter(c => c.lifecycleStage === LIFECYCLE_STAGES.EGG).length;
-            const larvae = cells.filter(c => c.lifecycleStage === LIFECYCLE_STAGES.LARVA).length;
-            const pupae = cells.filter(c => c.lifecycleStage === LIFECYCLE_STAGES.PUPA).length;
+            const eggs = cells.filter(c => c.lifecycleStage === LIFECYCLE_STAGES.EGG || c.type === CELL_TYPES.EGG).length;
+            const larvae = cells.filter(c => c.lifecycleStage === LIFECYCLE_STAGES.LARVA || c.type === CELL_TYPES.LARVA).length;
+            const pupae = cells.filter(c => c.lifecycleStage === LIFECYCLE_STAGES.PUPA || c.type === CELL_TYPES.PUPA).length;
             
             document.getElementById('totalCells').textContent = totalBuilt;
             document.getElementById('honeyCells').textContent = honeyFilled;
             document.getElementById('hiveSize').textContent = `${maxRing} rings`;
             document.getElementById('activeBees').textContent = bees.length;
+            document.getElementById('eggCount').textContent = eggs;
+            document.getElementById('larvaCount').textContent = larvae;
+            document.getElementById('pupaCount').textContent = pupae;
+            document.getElementById('queenEggs').textContent = queenBee ? queenBee.eggsLaid : 0;
             
             // Update stats history for graphing
             statsHistory.totalCells.push(totalBuilt);
@@ -1472,11 +1666,11 @@
                 // Update stats
                 updateStats();
                 
-                // Update tracked bee stats panel
-                updateTrackedBeeStats();
+                // Update tracked stats panels
+                updateAllTrackedStats();
             } else {
-                // Still update stats panel when paused
-                updateTrackedBeeStats();
+                // Still update stats panels when paused
+                updateAllTrackedStats();
             }
             
             requestAnimationFrame(animate);
@@ -1487,10 +1681,195 @@
             if (!trackedBee) {
                 trackedBeeStats.classList.remove('visible');
                 trackedBeeContent.innerHTML = '<div class="no-bee-tracked">No bee tracked<br>Click a bee to track it</div>';
-                return;
+            } else {
+                trackedBeeStats.classList.add('visible');
+                updateTrackedBeeStatsContent();
             }
+        }
+        
+        // Update tracked cell stats panel
+        function updateTrackedCellStats() {
+            if (!trackedCell) {
+                trackedCellStats.classList.remove('visible');
+                trackedCellContent.innerHTML = '<div class="no-bee-tracked">No cell tracked<br>Click a cell to track it</div>';
+            } else {
+                trackedCellStats.classList.add('visible');
+                updateTrackedCellStatsContent();
+            }
+        }
+        
+        // Update both panels
+        function updateAllTrackedStats() {
+            updateTrackedBeeStats();
+            updateTrackedCellStats();
+        }
+        
+        // Update tracked cell stats content
+        function updateTrackedCellStatsContent() {
+            const cell = trackedCell;
             
-            trackedBeeStats.classList.add('visible');
+            const lifecycleNames = {
+                [LIFECYCLE_STAGES.EGG]: 'Egg',
+                [LIFECYCLE_STAGES.LARVA]: 'Larva',
+                [LIFECYCLE_STAGES.PUPA]: 'Pupa'
+            };
+            
+            const typeNames = {
+                [CELL_TYPES.EMPTY]: 'Empty',
+                [CELL_TYPES.BROOD]: 'Brood',
+                [CELL_TYPES.HONEY]: 'Honey',
+                [CELL_TYPES.EGG]: 'Egg',
+                [CELL_TYPES.LARVA]: 'Larva',
+                [CELL_TYPES.PUPA]: 'Pupa',
+                [CELL_TYPES.BUILDING]: 'Building'
+            };
+            
+            // Find bees targeting this cell (incoming)
+            const incomingBees = bees.filter(bee => bee.targetCell === cell);
+            const incomingBeeTypes = incomingBees.map(bee => {
+                const typeNames = {
+                    [BEE_TYPES.FORAGER]: 'Forager',
+                    [BEE_TYPES.BUILDER]: 'Builder',
+                    [BEE_TYPES.NURSE]: 'Nurse'
+                };
+                return typeNames[bee.type] || bee.type;
+            });
+            
+            // Find bees that recently visited this cell (within last 50 frames)
+            // We'll track bees that are near this cell
+            const nearbyBees = bees.filter(bee => {
+                const dx = bee.x - cell.x;
+                const dy = bee.y - cell.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                return distance < 30; // Within 30 pixels
+            });
+            
+            // Count bees by type
+            const beeTypeCounts = {
+                forager: incomingBees.filter(b => b.type === BEE_TYPES.FORAGER).length,
+                builder: incomingBees.filter(b => b.type === BEE_TYPES.BUILDER).length,
+                nurse: incomingBees.filter(b => b.type === BEE_TYPES.NURSE).length
+            };
+            
+            trackedCellContent.innerHTML = `
+                <div class="tracked-bee-stats-grid">
+                    <div>
+                        <div class="tracked-stat-item">
+                            <span class="tracked-stat-label">Type</span>
+                            <span class="tracked-stat-value">${typeNames[cell.type] || cell.type}</span>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <div class="tracked-stat-item">
+                            <span class="tracked-stat-label">🥚 Lifecycle Stage</span>
+                            <span class="tracked-stat-value" style="${cell.lifecycleStage ? 'font-weight: bold; color: #667eea;' : 'color: #999;'}">
+                                ${cell.lifecycleStage ? 
+                                    (cell.lifecycleStage === LIFECYCLE_STAGES.EGG ? '🥚 ' : 
+                                     cell.lifecycleStage === LIFECYCLE_STAGES.LARVA ? '🐛 ' : 
+                                     cell.lifecycleStage === LIFECYCLE_STAGES.PUPA ? '🦋 ' : '') + 
+                                    lifecycleNames[cell.lifecycleStage] : 
+                                    'None'}
+                            </span>
+                        </div>
+                        ${cell.lifecycleStage ? `
+                        <div class="tracked-stat-item" style="margin-top: 5px;">
+                            <span class="tracked-stat-label">📈 Growth Progress</span>
+                            <span class="tracked-stat-value" style="font-weight: bold; color: #667eea;">${(cell.lifecycleProgress * 100).toFixed(1)}%</span>
+                        </div>
+                        <div class="tracked-stat-bar">
+                            <div class="tracked-stat-bar-fill" style="width: ${cell.lifecycleProgress * 100}%"></div>
+                        </div>
+                        ` : `
+                        <div class="tracked-stat-item" style="margin-top: 5px;">
+                            <span class="tracked-stat-label">📈 Growth Progress</span>
+                            <span class="tracked-stat-value" style="color: #999;">0%</span>
+                        </div>
+                        `}
+                    </div>
+                    
+                    <div>
+                        <div class="tracked-stat-item">
+                            <span class="tracked-stat-label">Build Progress</span>
+                            <span class="tracked-stat-value">${(cell.buildProgress * 100).toFixed(0)}%</span>
+                        </div>
+                        <div class="tracked-stat-bar">
+                            <div class="tracked-stat-bar-fill" style="width: ${cell.buildProgress * 100}%"></div>
+                        </div>
+                    </div>
+                    
+                    ${cell.honeyLevel > 0 ? `
+                    <div>
+                        <div class="tracked-stat-item">
+                            <span class="tracked-stat-label">Honey Level</span>
+                            <span class="tracked-stat-value">${(cell.honeyLevel * 100).toFixed(0)}%</span>
+                        </div>
+                        <div class="tracked-stat-bar">
+                            <div class="tracked-stat-bar-fill honey" style="width: ${cell.honeyLevel * 100}%"></div>
+                        </div>
+                    </div>
+                    ` : ''}
+                    
+                    <div>
+                        <div class="tracked-stat-item">
+                            <span class="tracked-stat-label">Age</span>
+                            <span class="tracked-stat-value">${Math.round(cell.age)} frames</span>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <div class="tracked-stat-item">
+                            <span class="tracked-stat-label">Coordinates</span>
+                            <span class="tracked-stat-value">(${cell.q}, ${cell.r})</span>
+                        </div>
+                    </div>
+                    
+                    ${cell.royalJelly ? `
+                    <div>
+                        <div class="tracked-stat-item">
+                            <span class="tracked-stat-label">Royal Jelly</span>
+                            <span class="tracked-stat-value" style="color: #FFD700;">✨ Present</span>
+                        </div>
+                    </div>
+                    ` : ''}
+                    
+                    <div style="margin-top: 10px; padding-top: 10px; border-top: 2px solid #eee;">
+                        <div class="tracked-stat-item">
+                            <span class="tracked-stat-label" style="font-weight: bold; color: #667eea;">🐝 Incoming Bees</span>
+                            <span class="tracked-stat-value">${incomingBees.length}</span>
+                        </div>
+                        ${incomingBees.length > 0 ? `
+                        <div style="margin-top: 5px; font-size: 12px; color: #666;">
+                            ${beeTypeCounts.forager > 0 ? `<div>• ${beeTypeCounts.forager} Forager${beeTypeCounts.forager > 1 ? 's' : ''}</div>` : ''}
+                            ${beeTypeCounts.builder > 0 ? `<div>• ${beeTypeCounts.builder} Builder${beeTypeCounts.builder > 1 ? 's' : ''}</div>` : ''}
+                            ${beeTypeCounts.nurse > 0 ? `<div>• ${beeTypeCounts.nurse} Nurse${beeTypeCounts.nurse > 1 ? 's' : ''}</div>` : ''}
+                        </div>
+                        ${config.beeNaming.enabled ? `
+                        <div style="margin-top: 8px; font-size: 11px; color: #888; max-height: 100px; overflow-y: auto;">
+                            ${incomingBees.slice(0, 5).map(bee => `<div>• ${bee.name || 'Unnamed'}</div>`).join('')}
+                            ${incomingBees.length > 5 ? `<div style="color: #999;">... and ${incomingBees.length - 5} more</div>` : ''}
+                        </div>
+                        ` : ''}
+                        ` : '<div style="font-size: 12px; color: #999; margin-top: 5px;">No bees targeting this cell</div>'}
+                    </div>
+                    
+                    <div>
+                        <div class="tracked-stat-item">
+                            <span class="tracked-stat-label" style="font-weight: bold; color: #667eea;">📍 Nearby Bees</span>
+                            <span class="tracked-stat-value">${nearbyBees.length}</span>
+                        </div>
+                        ${nearbyBees.length > 0 ? `
+                        <div style="margin-top: 5px; font-size: 12px; color: #666;">
+                            <div>Within 30px radius</div>
+                        </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Update tracked bee stats content
+        function updateTrackedBeeStatsContent() {
             
             const typeNames = {
                 [BEE_TYPES.FORAGER]: 'Forager',
@@ -1507,8 +1886,17 @@
             const distanceToTarget = bee.targetCell ? 
                 Math.sqrt(Math.pow(bee.targetCell.x - bee.x, 2) + Math.pow(bee.targetCell.y - bee.y, 2)) : 0;
             
-            trackedBeeContent.innerHTML = `
+            const beeContent = `
                 <div class="tracked-bee-stats-grid">
+                    ${bee.name ? `
+                    <div>
+                        <div class="tracked-stat-item">
+                            <span class="tracked-stat-label">Name</span>
+                            <span class="tracked-stat-value" style="font-weight: bold; color: #667eea;">${bee.name}</span>
+                        </div>
+                    </div>
+                    ` : ''}
+                    
                     <div>
                         <div class="tracked-stat-item">
                             <span class="tracked-stat-label">Type</span>
@@ -1591,6 +1979,8 @@
                     `}
                 </div>
             `;
+            
+            trackedBeeContent.innerHTML = beeContent;
         }
         
         // Event listeners
@@ -1619,7 +2009,8 @@
                     angle: Math.random() * Math.PI * 2,
                     state: 'exploring',
                     type: beeType,
-                    efficiency: beeType === BEE_TYPES.FORAGER ? 1.2 : beeType === BEE_TYPES.BUILDER ? 1.1 : 1.0
+                    efficiency: beeType === BEE_TYPES.FORAGER ? 1.2 : beeType === BEE_TYPES.BUILDER ? 1.1 : 1.0,
+                    name: generateBeeName(beeType)
                 });
             }
             while (bees.length > config.colonySize) {
@@ -1630,6 +2021,42 @@
         document.getElementById('resourceAvailability').addEventListener('input', (e) => {
             config.resourceAvailability = parseInt(e.target.value);
             document.getElementById('resourceValue').textContent = config.resourceAvailability;
+        });
+        
+        // Bee naming controls
+        document.getElementById('beeNamingEnabled').addEventListener('change', (e) => {
+            config.beeNaming.enabled = e.target.checked;
+            // Regenerate names for all existing bees
+            if (config.beeNaming.enabled) {
+                bees.forEach(bee => {
+                    bee.name = generateBeeName(bee.type);
+                });
+                if (queenBee) {
+                    queenBee.name = generateBeeName(BEE_TYPES.QUEEN);
+                }
+            } else {
+                bees.forEach(bee => {
+                    bee.name = null;
+                });
+                if (queenBee) {
+                    queenBee.name = null;
+                }
+            }
+            updateAllTrackedStats();
+        });
+        
+        document.getElementById('beeNamingFormat').addEventListener('change', (e) => {
+            config.beeNaming.format = e.target.value;
+            // Regenerate names for all existing bees
+            if (config.beeNaming.enabled) {
+                bees.forEach(bee => {
+                    bee.name = generateBeeName(bee.type);
+                });
+                if (queenBee) {
+                    queenBee.name = generateBeeName(BEE_TYPES.QUEEN);
+                }
+            }
+            updateAllTrackedStats();
         });
         
         document.getElementById('hiveSize').addEventListener('input', (e) => {
@@ -1677,9 +2104,13 @@
         });
         
         document.getElementById('resetBtn').addEventListener('click', () => {
+            beeCounter = 0; // Reset bee counter
             initializeGrid();
             initializeQueen();
             initializeBees();
+            trackedBee = null;
+            trackedCell = null;
+            updateAllTrackedStats();
         });
         
         document.getElementById('pauseBtn').addEventListener('click', (e) => {
@@ -1694,7 +2125,8 @@
         
         document.getElementById('clearTrackingBtn').addEventListener('click', () => {
             trackedBee = null;
-            updateTrackedBeeStats(); // Update stats panel
+            trackedCell = null;
+            updateAllTrackedStats(); // Update stats panels
         });
         
         // Mouse move for tooltips
@@ -1718,6 +2150,7 @@
                     <div class="tooltip-title">🐝 Worker Bee 
                         <span class="bee-type-badge ${typeColors[bee.type]}">${typeNames[bee.type]}</span>
                     </div>
+                    ${bee.name ? `<div class="tooltip-item" style="font-weight: bold; color: #667eea;">Name: ${bee.name}</div>` : ''}
                     <div class="tooltip-item">State: ${bee.state}</div>
                     <div class="tooltip-item">Carrying: ${bee.carrying ? 'Nectar/Pollen' : 'Empty'}</div>
                     <div class="tooltip-item">Speed: ${bee.speed.toFixed(2)}</div>
@@ -1751,6 +2184,9 @@
                     <div class="tooltip-item">Honey Level: ${(cell.honeyLevel * 100).toFixed(0)}%</div>
                     <div class="tooltip-item">Age: ${Math.round(cell.age)} frames</div>
                     <div class="tooltip-item">Coordinates: (${cell.q}, ${cell.r})</div>
+                    <div class="tooltip-item" style="margin-top: 5px; font-style: italic;">
+                        ${cell === trackedCell ? '✅ Currently tracked • Click another cell to switch' : 'Click to track'}
+                    </div>
                 `;
                 showTooltip(e.clientX, e.clientY, content);
             } else if (queenBee) {
@@ -1764,6 +2200,7 @@
                 if (distance < 15) {
                     const content = `
                         <div class="tooltip-title">👑 Queen Bee</div>
+                        ${queenBee.name ? `<div class="tooltip-item" style="font-weight: bold; color: #FFD700;">Name: ${queenBee.name}</div>` : ''}
                         <div class="tooltip-item">State: ${queenBee.state}</div>
                         <div class="tooltip-item">Eggs Laid: ${queenBee.eggsLaid}</div>
                         <div class="tooltip-item">Royal Jelly Produced: ${queenBee.royalJellyProduction}</div>
@@ -1782,12 +2219,15 @@
             hideTooltip();
         });
         
-        // Click to track bee (works even when paused)
+        // Click to track bee or cell (works even when paused)
         canvas.addEventListener('click', (e) => {
             const bee = getBeeAtPosition(e.clientX, e.clientY);
+            const cell = getCellAtPosition(e.clientX, e.clientY);
+            
             if (bee) {
                 trackedBee = bee;
-                updateTrackedBeeStats(); // Update stats panel immediately
+                // Don't clear cell tracking - both can be tracked simultaneously
+                updateAllTrackedStats(); // Update stats panels immediately
                 // Show confirmation tooltip briefly
                 const content = `
                     <div class="tooltip-title">✅ Tracking ${bee.type === BEE_TYPES.FORAGER ? 'Forager' : bee.type === BEE_TYPES.BUILDER ? 'Builder' : 'Nurse'}</div>
@@ -1823,14 +2263,61 @@
                         showTooltip(e.clientX, e.clientY, normalContent);
                     }
                 }, 1000);
+            } else if (cell && cell.buildProgress > 0) {
+                trackedCell = cell;
+                // Don't clear bee tracking - both can be tracked simultaneously
+                updateAllTrackedStats(); // Update stats panels immediately
+                // Show confirmation tooltip briefly
+                const lifecycleInfo = cell.lifecycleStage ? ` (${cell.lifecycleStage})` : '';
+                const content = `
+                    <div class="tooltip-title">✅ Tracking Cell${lifecycleInfo}</div>
+                    <div class="tooltip-item">Stats shown in side panel</div>
+                `;
+                showTooltip(e.clientX, e.clientY, content);
+                setTimeout(() => {
+                    // Restore normal tooltip after 1 second
+                    const currentCell = getCellAtPosition(e.clientX, e.clientY);
+                    if (currentCell === cell) {
+                        let lifecycleInfo = '';
+                        if (cell.lifecycleStage) {
+                            const stageNames = {
+                                [LIFECYCLE_STAGES.EGG]: 'Egg',
+                                [LIFECYCLE_STAGES.LARVA]: 'Larva',
+                                [LIFECYCLE_STAGES.PUPA]: 'Pupa'
+                            };
+                            lifecycleInfo = `
+                                <div class="tooltip-item">Lifecycle: ${stageNames[cell.lifecycleStage]}</div>
+                                <div class="tooltip-item">Progress: ${(cell.lifecycleProgress * 100).toFixed(0)}%</div>
+                                ${cell.royalJelly ? '<div class="tooltip-item" style="color: #FFD700;">✨ Royal Jelly</div>' : ''}
+                            `;
+                        }
+                        
+                        const normalContent = `
+                            <div class="tooltip-title">🔷 Hexagonal Cell</div>
+                            <div class="tooltip-item">Type: ${cell.type}</div>
+                            ${lifecycleInfo}
+                            <div class="tooltip-item">Build Progress: ${(cell.buildProgress * 100).toFixed(0)}%</div>
+                            <div class="tooltip-item">Honey Level: ${(cell.honeyLevel * 100).toFixed(0)}%</div>
+                            <div class="tooltip-item">Age: ${Math.round(cell.age)} frames</div>
+                            <div class="tooltip-item">Coordinates: (${cell.q}, ${cell.r})</div>
+                            <div class="tooltip-item" style="margin-top: 5px; font-style: italic;">Click to track • Currently tracked</div>
+                        `;
+                        showTooltip(e.clientX, e.clientY, normalContent);
+                    }
+                }, 1000);
             } else {
                 // Clicked on empty space - clear tracking
                 trackedBee = null;
-                updateTrackedBeeStats(); // Update stats panel
+                trackedCell = null;
+                updateAllTrackedStats(); // Update stats panels
             }
         });
         
         // Initialize and start
+        // Initialize UI controls to match config
+        document.getElementById('beeNamingEnabled').checked = config.beeNaming.enabled;
+        document.getElementById('beeNamingFormat').value = config.beeNaming.format;
+        
         initializeGrid();
         initializeQueen();
         initializeBees();

@@ -42,6 +42,10 @@ An interactive, real-time simulation of honeybee colony behavior and honeycomb c
 - **Pathfinding**: Smooth movement and navigation to target cells
 - **Visual Identification**: Bees colored by type (golden/orange foragers, dark orange builders, green nurses)
 - **Wing Animation**: Realistic flapping wing animation
+- **Bee Naming System**: Each bee gets a unique random name or ID
+  - Names appear in tooltips, tracked stats, and cell activity panels
+  - Configurable naming formats (numbers, names, or mixed)
+  - Names help identify and track individual bees throughout the simulation
 
 ### 🍯 Honey Storage System
 - **Progressive Filling**: Cells fill with honey gradually as bees make multiple trips
@@ -61,8 +65,12 @@ An interactive, real-time simulation of honeybee colony behavior and honeycomb c
 - **Resource Availability**: Control the rate of resource gathering (10-100%)
 - **Hive Size Slider**: Set the maximum hive size (3-15 rings) with live resizing
 - **Simulation Speed**: Control time flow (0.25x to 4x speed)
+- **Bee Naming**: Enable/disable random names for bees with configurable formats
+  - **Mixed Format**: Combination of numbers (e.g., `forager#001`) and names (e.g., `forager-ben`)
+  - **Numbers Only**: Sequential IDs like `forager#001`, `builder#002`, `nurse#003`
+  - **Names Only**: Random names like `forager-honey`, `builder-buzz`, `nurse-amber`
 - **Individual Bee Tracking**: Click on any bee to follow its journey with visual tracking
-- **Interactive Tooltips**: Hover over bees and cells to see detailed information
+- **Interactive Tooltips**: Hover over bees and cells to see detailed information (including bee names)
 - **Pause/Resume**: Freeze the simulation at any moment
 - **Reset Button**: Start fresh with a new hive
 - **Clear Tracking**: Stop following the currently tracked bee
@@ -84,10 +92,12 @@ An interactive, real-time simulation of honeybee colony behavior and honeycomb c
 - Responsive design
 - Color-coded legend for cell types and bee types
 - Professional stat displays with 4 key metrics
-- **Side stats panel** for tracked bee monitoring with visual progress bars
+- **Dual side panels**: Left for cell stats, right for bee stats
+- **Visual connections**: Dashed lines show bees targeting tracked cells
 - Real-time interactive tooltips with detailed information
-- Visual tracking indicators (golden rings and lines)
+- Visual tracking indicators (golden rings for bees, blue glow for cells)
 - Dynamic speed control feedback
+- Default 0.5x speed for easier observation
 
 ## 🚀 Getting Started
 
@@ -152,18 +162,29 @@ The deployment happens automatically on every push to the main branch, or you ca
    - Slow motion (0.25x-0.75x): Study bee behaviors in detail
    - Normal speed (1.0x): Real-time simulation
    - Fast forward (1.25x-4x): Watch colony expansion rapidly
-6. **Track Individual Bees**: Click on any bee to follow its journey
-   - Golden ring appears around the tracked bee (works even when paused!)
-   - **Side stats panel** appears showing real-time bee statistics:
-     - Bee type, state, carrying status
-     - Speed and efficiency with visual bars
-     - Current position and target distance
-     - Target cell coordinates
-   - Lines show the bee's current target destination
+6. **Track Individual Bees or Cells**: Click on any bee or cell to track it
+   - **Bees** (Right Panel): Golden ring appears around the tracked bee (works even when paused!)
+     - **Right side stats panel** shows real-time bee statistics:
+       - Bee type, state, carrying status
+       - Speed and efficiency with visual bars
+       - Current position and target distance
+       - Target cell coordinates
+     - Lines show the bee's current target destination
+   - **Cells** (Left Panel): Blue glow appears around the tracked cell
+     - **Left side stats panel** shows real-time cell statistics:
+       - Cell type, lifecycle stage (if applicable)
+       - Build progress and honey level with visual bars
+       - Lifecycle progress (for eggs, larvae, pupae)
+       - Age, coordinates, and position
+       - Royal jelly indicator (if present)
+       - **Incoming bees**: Count and types of bees targeting this cell
+       - **Nearby bees**: Bees within proximity of the cell
+       - Visual lines connect tracked cell to incoming bees
+   - **Independent Tracking**: Track a bee and a cell simultaneously - both panels can be visible at once
    - Stats update continuously for easy monitoring
-   - Click another bee to switch tracking, or click empty space to clear
-   - Click "Clear Tracking" button to stop following
-   - Perfect for studying bee behavior when simulation is paused
+   - Click another bee/cell to switch tracking, or click empty space to clear
+   - Click "Clear Tracking" button to stop following both
+   - Perfect for studying bee behavior and cell development simultaneously when simulation is paused
 7. **Explore with Tooltips**: Hover over bees and cells to see:
    - Bee information: type (Forager/Builder/Nurse), state, carrying status, speed, efficiency, position
    - Cell information: type, build progress, honey level, age, coordinates
@@ -247,7 +268,11 @@ const config = {
     colonySize: 10,           // Starting number of bees
     resourceAvailability: 50, // Starting resource level
     maxRings: 8,              // Maximum hive size (number of rings)
-    simulationSpeed: 1.0      // Simulation time multiplier (0.25x to 4x)
+    simulationSpeed: 0.5,     // Simulation time multiplier (0.25x to 4x)
+    beeNaming: {
+        enabled: true,        // Enable/disable bee naming
+        format: 'mixed'       // 'number', 'name', or 'mixed'
+    }
 };
 ```
 
