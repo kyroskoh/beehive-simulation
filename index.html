@@ -39,6 +39,11 @@
             display: block;
             border: 2px solid #ddd;
             border-radius: 10px;
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            cursor: default;
         }
         
         #controls {
@@ -706,6 +711,19 @@
         let fanningBees = []; // Bees actively fanning for temperature control
         let swarmingThreshold = 0.9; // Bees/cell ratio to trigger swarming
         
+        // Panning and zooming state
+        let panX = 0; // Horizontal pan offset
+        let panY = 0; // Vertical pan offset
+        let zoomLevel = 1.0; // Current zoom level (1.0 = 100%)
+        const minZoom = 0.5; // Minimum zoom level (50%)
+        const maxZoom = 3.0; // Maximum zoom level (300%)
+        let isPanning = false; // Whether user is currently panning
+        let hasPanned = false; // Whether user actually moved during pan (to distinguish from click)
+        let panStartX = 0; // Starting X position when pan starts
+        let panStartY = 0; // Starting Y position when pan starts
+        let panOffsetX = 0; // Pan offset when drag started
+        let panOffsetY = 0; // Pan offset when drag started
+        
         // Hexagon cells
         const cells = [];
         
@@ -887,9 +905,22 @@
         
         function pixelToHex(x, y) {
             const size = config.hexSize;
-            const q = (2/3 * (x - config.centerX)) / size;
-            const r = (-1/3 * (x - config.centerX) + Math.sqrt(3)/3 * (y - config.centerY)) / size;
+            // Account for pan offset and zoom
+            const rect = canvas.getBoundingClientRect();
+            const canvasX = x - rect.left;
+            const canvasY = y - rect.top;
+            const worldX = (canvasX - canvas.width / 2 * (1 - zoomLevel)) / zoomLevel - panX;
+            const worldY = (canvasY - canvas.height / 2 * (1 - zoomLevel)) / zoomLevel - panY;
+            const adjustedX = worldX - config.centerX;
+            const adjustedY = worldY - config.centerY;
+            const q = (2/3 * adjustedX) / size;
+            const r = (-1/3 * adjustedX + Math.sqrt(3)/3 * adjustedY) / size;
             return { q: Math.round(q), r: Math.round(r) };
+        }
+        
+        // Check if hive is pannable (always true now)
+        function isHivePannable() {
+            return true; // Panning always available
         }
         
         // Draw hexagon
@@ -1425,7 +1456,10 @@
             if (!queenBee) return;
             
             ctx.save();
-            ctx.translate(queenBee.x, queenBee.y);
+            const drawX = (queenBee.x + panX) * zoomLevel + canvas.width / 2 * (1 - zoomLevel);
+            const drawY = (queenBee.y + panY) * zoomLevel + canvas.height / 2 * (1 - zoomLevel);
+            ctx.translate(drawX, drawY);
+            ctx.scale(zoomLevel, zoomLevel);
             ctx.rotate(queenBee.angle);
             
             // Larger size for queen
@@ -1473,7 +1507,10 @@
         // Draw bee
         function drawBee(bee) {
             ctx.save();
-            ctx.translate(bee.x, bee.y);
+            const drawX = (bee.x + panX) * zoomLevel + canvas.width / 2 * (1 - zoomLevel);
+            const drawY = (bee.y + panY) * zoomLevel + canvas.height / 2 * (1 - zoomLevel);
+            ctx.translate(drawX, drawY);
+            ctx.scale(zoomLevel, zoomLevel);
             
             // Highlight tracked bee (works even when paused)
             if (bee === trackedBee) {
@@ -1493,21 +1530,28 @@
                 
                 // Draw tracking line from bee to target (even when paused)
                 if (bee.targetCell) {
+                    ctx.restore(); // Temporarily restore to draw line in world coordinates
+                    const targetX = (bee.targetCell.x + panX) * zoomLevel + canvas.width / 2 * (1 - zoomLevel);
+                    const targetY = (bee.targetCell.y + panY) * zoomLevel + canvas.height / 2 * (1 - zoomLevel);
                     ctx.beginPath();
-                    ctx.moveTo(0, 0);
-                    ctx.lineTo(bee.targetCell.x - bee.x, bee.targetCell.y - bee.y);
+                    ctx.moveTo(drawX, drawY);
+                    ctx.lineTo(targetX, targetY);
                     ctx.strokeStyle = 'rgba(255, 215, 0, 0.5)';
-                    ctx.lineWidth = 2;
+                    ctx.lineWidth = 2 / zoomLevel; // Adjust line width for zoom
                     ctx.stroke();
                     
                     // Draw target indicator
                     ctx.save();
-                    ctx.translate(bee.targetCell.x - bee.x, bee.targetCell.y - bee.y);
+                    ctx.translate(targetX, targetY);
+                    ctx.scale(zoomLevel, zoomLevel);
                     ctx.beginPath();
                     ctx.arc(0, 0, 5, 0, Math.PI * 2);
                     ctx.fillStyle = 'rgba(255, 215, 0, 0.6)';
                     ctx.fill();
                     ctx.restore();
+                    ctx.save(); // Restore save state for bee drawing
+                    ctx.translate(drawX, drawY);
+                    ctx.scale(zoomLevel, zoomLevel);
                 }
             }
             
@@ -1633,6 +1677,10 @@
         
         // Draw cell
         function drawCell(cell) {
+            // Apply pan offset and zoom
+            const drawX = (cell.x + panX) * zoomLevel + canvas.width / 2 * (1 - zoomLevel);
+            const drawY = (cell.y + panY) * zoomLevel + canvas.height / 2 * (1 - zoomLevel);
+            
             let fillColor;
             
             if (cell.buildProgress === 0) {
@@ -1660,32 +1708,35 @@
                 fillColor = '#fff4e6';
             }
             
-            const size = config.hexSize * cell.buildProgress;
+            const size = config.hexSize * cell.buildProgress * zoomLevel;
             
             // Highlight tracked cell
             if (cell === trackedCell) {
                 // Draw outer glow
                 ctx.shadowColor = 'rgba(100, 150, 255, 0.8)';
                 ctx.shadowBlur = 15;
-                drawHexagon(cell.x, cell.y, size + 2, fillColor);
+                drawHexagon(drawX, drawY, size + 2, fillColor);
                 ctx.shadowBlur = 0;
                 
                 // Draw lines to incoming bees
                 bees.forEach(bee => {
                     if (bee.targetCell === cell) {
+                        const beeDrawX = (bee.x + panX) * zoomLevel + canvas.width / 2 * (1 - zoomLevel);
+                        const beeDrawY = (bee.y + panY) * zoomLevel + canvas.height / 2 * (1 - zoomLevel);
                         ctx.beginPath();
-                        ctx.moveTo(cell.x, cell.y);
-                        ctx.lineTo(bee.x, bee.y);
+                        ctx.moveTo(drawX, drawY);
+                        ctx.lineTo(beeDrawX, beeDrawY);
                         ctx.strokeStyle = 'rgba(100, 150, 255, 0.4)';
-                        ctx.lineWidth = 2;
-                        ctx.setLineDash([5, 5]);
+                        ctx.lineWidth = 2 / zoomLevel; // Adjust line width for zoom
+                        ctx.setLineDash([5 / zoomLevel, 5 / zoomLevel]);
                         ctx.stroke();
                         ctx.setLineDash([]);
                         
                         // Draw arrow at bee end
-                        const angle = Math.atan2(bee.y - cell.y, bee.x - cell.x);
+                        const angle = Math.atan2(beeDrawY - drawY, beeDrawX - drawX);
                         ctx.save();
-                        ctx.translate(bee.x, bee.y);
+                        ctx.translate(beeDrawX, beeDrawY);
+                        ctx.scale(zoomLevel, zoomLevel);
                         ctx.rotate(angle);
                         ctx.fillStyle = 'rgba(100, 150, 255, 0.6)';
                         ctx.beginPath();
@@ -1699,7 +1750,7 @@
                 });
             }
             
-            drawHexagon(cell.x, cell.y, size, fillColor);
+            drawHexagon(drawX, drawY, size, fillColor);
             
             // Draw lifecycle indicators (check both lifecycleStage and type for reliability)
             // Make them more prominent and visible
@@ -1707,65 +1758,65 @@
                 // Draw egg - white circle with bright yellow background (more prominent)
                 ctx.fillStyle = '#FFEB3B'; // Bright yellow background
                 ctx.beginPath();
-                ctx.arc(cell.x, cell.y, size * 0.4, 0, Math.PI * 2);
+                ctx.arc(drawX, drawY, size * 0.4, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.fillStyle = '#FFFFFF'; // White egg
                 ctx.beginPath();
-                ctx.arc(cell.x, cell.y, size * 0.3, 0, Math.PI * 2);
+                ctx.arc(drawX, drawY, size * 0.3, 0, Math.PI * 2);
                 ctx.fill();
                 // Small highlight
                 ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
                 ctx.beginPath();
-                ctx.arc(cell.x - size * 0.12, cell.y - size * 0.12, size * 0.1, 0, Math.PI * 2);
+                ctx.arc(drawX - size * 0.12, drawY - size * 0.12, size * 0.1, 0, Math.PI * 2);
                 ctx.fill();
                 // Add border for visibility
                 ctx.strokeStyle = '#FFC107';
                 ctx.lineWidth = 1.5;
                 ctx.beginPath();
-                ctx.arc(cell.x, cell.y, size * 0.3, 0, Math.PI * 2);
+                ctx.arc(drawX, drawY, size * 0.3, 0, Math.PI * 2);
                 ctx.stroke();
             } else if (cell.lifecycleStage === LIFECYCLE_STAGES.LARVA || cell.type === CELL_TYPES.LARVA) {
                 // Draw larva - orange wiggly shape (more prominent)
                 ctx.fillStyle = '#FF6B00'; // Bright orange
                 ctx.beginPath();
-                ctx.ellipse(cell.x, cell.y, size * 0.35, size * 0.25, 0, 0, Math.PI * 2);
+                ctx.ellipse(drawX, drawY, size * 0.35, size * 0.25, 0, 0, Math.PI * 2);
                 ctx.fill();
                 // Add segments for more realistic look
                 ctx.fillStyle = '#FF8C00';
                 ctx.beginPath();
-                ctx.ellipse(cell.x - size * 0.18, cell.y, size * 0.12, size * 0.18, 0, 0, Math.PI * 2);
+                ctx.ellipse(drawX - size * 0.18, drawY, size * 0.12, size * 0.18, 0, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.beginPath();
-                ctx.ellipse(cell.x + size * 0.18, cell.y, size * 0.12, size * 0.18, 0, 0, Math.PI * 2);
+                ctx.ellipse(drawX + size * 0.18, drawY, size * 0.12, size * 0.18, 0, 0, Math.PI * 2);
                 ctx.fill();
                 // Add border
                 ctx.strokeStyle = '#FF4500';
                 ctx.lineWidth = 1.5;
                 ctx.beginPath();
-                ctx.ellipse(cell.x, cell.y, size * 0.35, size * 0.25, 0, 0, Math.PI * 2);
+                ctx.ellipse(drawX, drawY, size * 0.35, size * 0.25, 0, 0, Math.PI * 2);
                 ctx.stroke();
             } else if (cell.lifecycleStage === LIFECYCLE_STAGES.PUPA || cell.type === CELL_TYPES.PUPA) {
                 // Draw pupa - purple cocoon shape (more prominent)
                 ctx.fillStyle = '#9C27B0'; // Bright purple
                 ctx.beginPath();
-                ctx.ellipse(cell.x, cell.y, size * 0.3, size * 0.4, 0, 0, Math.PI * 2);
+                ctx.ellipse(drawX, drawY, size * 0.3, size * 0.4, 0, 0, Math.PI * 2);
                 ctx.fill();
                 // Add darker outline
                 ctx.strokeStyle = '#7B1FA2';
                 ctx.lineWidth = 2;
                 ctx.beginPath();
-                ctx.ellipse(cell.x, cell.y, size * 0.3, size * 0.4, 0, 0, Math.PI * 2);
+                ctx.ellipse(drawX, drawY, size * 0.3, size * 0.4, 0, 0, Math.PI * 2);
                 ctx.stroke();
                 // Add segments/lines
                 ctx.strokeStyle = '#6A1B9A';
                 ctx.lineWidth = 1.5;
                 ctx.beginPath();
-                ctx.moveTo(cell.x - size * 0.25, cell.y - size * 0.25);
-                ctx.lineTo(cell.x + size * 0.25, cell.y - size * 0.25);
-                ctx.moveTo(cell.x - size * 0.25, cell.y);
-                ctx.lineTo(cell.x + size * 0.25, cell.y);
-                ctx.moveTo(cell.x - size * 0.25, cell.y + size * 0.25);
-                ctx.lineTo(cell.x + size * 0.25, cell.y + size * 0.25);
+                ctx.moveTo(drawX - size * 0.25, drawY - size * 0.25);
+                ctx.lineTo(drawX + size * 0.25, drawY - size * 0.25);
+                ctx.moveTo(drawX - size * 0.25, drawY);
+                ctx.lineTo(drawX + size * 0.25, drawY);
+                ctx.moveTo(drawX - size * 0.25, drawY + size * 0.25);
+                ctx.lineTo(drawX + size * 0.25, drawY + size * 0.25);
                 ctx.stroke();
             }
             
@@ -1773,10 +1824,10 @@
             if (cell.royalJelly) {
                 ctx.fillStyle = 'rgba(255, 215, 0, 0.8)';
                 ctx.beginPath();
-                ctx.arc(cell.x - size * 0.3, cell.y - size * 0.3, 3, 0, Math.PI * 2);
+                ctx.arc(drawX - size * 0.3, drawY - size * 0.3, 3, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.beginPath();
-                ctx.arc(cell.x + size * 0.3, cell.y + size * 0.3, 3, 0, Math.PI * 2);
+                ctx.arc(drawX + size * 0.3, drawY + size * 0.3, 3, 0, Math.PI * 2);
                 ctx.fill();
             }
             
@@ -1784,7 +1835,7 @@
             if (cell.honeyLevel > 0 && cell.type !== CELL_TYPES.BROOD && !cell.lifecycleStage) {
                 ctx.fillStyle = '#FFD700';
                 ctx.beginPath();
-                ctx.arc(cell.x, cell.y, size * 0.3 * cell.honeyLevel, 0, Math.PI * 2);
+                ctx.arc(drawX, drawY, size * 0.3 * cell.honeyLevel, 0, Math.PI * 2);
                 ctx.fill();
             }
         }
@@ -2042,15 +2093,19 @@
             tooltip.style.display = 'none';
         }
         
-        // Get cell at position
+        // Get cell at position (accounting for zoom and pan)
         function getCellAtPosition(x, y) {
             const rect = canvas.getBoundingClientRect();
             const canvasX = x - rect.left;
             const canvasY = y - rect.top;
             
+            // Convert screen coordinates to world coordinates
+            const worldX = (canvasX - canvas.width / 2 * (1 - zoomLevel)) / zoomLevel - panX;
+            const worldY = (canvasY - canvas.height / 2 * (1 - zoomLevel)) / zoomLevel - panY;
+            
             for (let cell of cells) {
-                const dx = canvasX - cell.x;
-                const dy = canvasY - cell.y;
+                const dx = worldX - cell.x;
+                const dy = worldY - cell.y;
                 const distance = Math.sqrt(dx * dx + dy * dy);
                 if (distance < config.hexSize) {
                     return cell;
@@ -2059,15 +2114,19 @@
             return null;
         }
         
-        // Get bee at position
+        // Get bee at position (accounting for zoom and pan)
         function getBeeAtPosition(x, y) {
             const rect = canvas.getBoundingClientRect();
             const canvasX = x - rect.left;
             const canvasY = y - rect.top;
             
+            // Convert screen coordinates to world coordinates
+            const worldX = (canvasX - canvas.width / 2 * (1 - zoomLevel)) / zoomLevel - panX;
+            const worldY = (canvasY - canvas.height / 2 * (1 - zoomLevel)) / zoomLevel - panY;
+            
             for (let bee of bees) {
-                const dx = canvasX - bee.x;
-                const dy = canvasY - bee.y;
+                const dx = worldX - bee.x;
+                const dy = worldY - bee.y;
                 const distance = Math.sqrt(dx * dx + dy * dy);
                 if (distance < 10) {
                     return bee;
@@ -2625,8 +2684,34 @@
             updateAllTrackedStats(); // Update stats panels
         });
         
-        // Mouse move for tooltips
+        // Mouse move for tooltips and panning
         canvas.addEventListener('mousemove', (e) => {
+            // Handle panning first
+            if (isPanning) {
+                e.preventDefault();
+                const dx = e.clientX - panStartX;
+                const dy = e.clientY - panStartY;
+                panX = panOffsetX + dx;
+                panY = panOffsetY + dy;
+                // Mark that we've actually panned (moved more than a few pixels)
+                if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+                    hasPanned = true;
+                }
+                hideTooltip(); // Hide tooltip while panning
+                return; // Don't show tooltips while panning
+            }
+            
+            // Update cursor for panning (always show grab cursor on empty space)
+            if (!isPanning) {
+                const bee = getBeeAtPosition(e.clientX, e.clientY);
+                const cell = getCellAtPosition(e.clientX, e.clientY);
+                if (!bee && !cell) {
+                    canvas.style.cursor = 'grab';
+                } else {
+                    canvas.style.cursor = 'default';
+                }
+            }
+            
             const cell = getCellAtPosition(e.clientX, e.clientY);
             const bee = getBeeAtPosition(e.clientX, e.clientY);
             
@@ -2698,8 +2783,11 @@
                 const rect = canvas.getBoundingClientRect();
                 const canvasX = e.clientX - rect.left;
                 const canvasY = e.clientY - rect.top;
-                const dx = canvasX - queenBee.x;
-                const dy = canvasY - queenBee.y;
+                // Convert screen coordinates to world coordinates
+                const worldX = (canvasX - canvas.width / 2 * (1 - zoomLevel)) / zoomLevel - panX;
+                const worldY = (canvasY - canvas.height / 2 * (1 - zoomLevel)) / zoomLevel - panY;
+                const dx = worldX - queenBee.x;
+                const dy = worldY - queenBee.y;
                 const distance = Math.sqrt(dx * dx + dy * dy);
                 
                 if (distance < 15) {
@@ -2722,10 +2810,90 @@
         
         canvas.addEventListener('mouseleave', () => {
             hideTooltip();
+            if (isPanning) {
+                isPanning = false;
+                canvas.style.cursor = 'default';
+            }
+        });
+        
+        // Panning functionality (always available)
+        canvas.addEventListener('mousedown', (e) => {
+            // Check if clicking on a bee or cell first
+            const bee = getBeeAtPosition(e.clientX, e.clientY);
+            const cell = getCellAtPosition(e.clientX, e.clientY);
+            
+            // Only start panning if not clicking on a bee or cell
+            if (!bee && !cell) {
+                e.preventDefault(); // Prevent default behavior
+                isPanning = true;
+                hasPanned = false; // Reset pan movement flag
+                panStartX = e.clientX;
+                panStartY = e.clientY;
+                panOffsetX = panX;
+                panOffsetY = panY;
+                canvas.style.cursor = 'grabbing';
+            }
+        });
+        
+        canvas.addEventListener('mouseup', (e) => {
+            if (isPanning) {
+                e.preventDefault();
+                e.stopPropagation();
+                isPanning = false;
+                // Reset cursor - will be updated by mousemove handler
+                canvas.style.cursor = 'grab';
+            }
+        });
+        
+        // Also handle mouseup on window to catch cases where mouse leaves canvas
+        window.addEventListener('mouseup', () => {
+            if (isPanning) {
+                isPanning = false;
+                hasPanned = false;
+                canvas.style.cursor = 'grab';
+            }
+        });
+        
+        // Zoom functionality with mouse wheel
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            
+            // Calculate zoom factor
+            const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1; // Zoom out on scroll down, zoom in on scroll up
+            const newZoom = Math.max(minZoom, Math.min(maxZoom, zoomLevel * zoomFactor));
+            
+            if (newZoom !== zoomLevel) {
+                // Zoom towards mouse position
+                const worldX = (mouseX - canvas.width / 2 * (1 - zoomLevel)) / zoomLevel - panX;
+                const worldY = (mouseY - canvas.height / 2 * (1 - zoomLevel)) / zoomLevel - panY;
+                
+                zoomLevel = newZoom;
+                
+                // Adjust pan to keep mouse position fixed
+                const newWorldX = (mouseX - canvas.width / 2 * (1 - zoomLevel)) / zoomLevel - panX;
+                const newWorldY = (mouseY - canvas.height / 2 * (1 - zoomLevel)) / zoomLevel - panY;
+                
+                panX += (newWorldX - worldX);
+                panY += (newWorldY - worldY);
+            }
         });
         
         // Click to track bee or cell (works even when paused)
         canvas.addEventListener('click', (e) => {
+            // Don't track if we were panning (actually moved, not just clicked)
+            if (hasPanned || isPanning) {
+                e.preventDefault();
+                e.stopPropagation();
+                isPanning = false;
+                hasPanned = false;
+                canvas.style.cursor = 'grab';
+                return;
+            }
+            
             const bee = getBeeAtPosition(e.clientX, e.clientY);
             const cell = getCellAtPosition(e.clientX, e.clientY);
             
